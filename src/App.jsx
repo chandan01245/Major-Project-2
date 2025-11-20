@@ -607,8 +607,6 @@ const IndianUrbanForm = () => {
       
       if (generated3DAssets && drawnPolygon) {
         console.log('✅ Rendering 3D Assets:', generated3DAssets);
-        console.log('Building count:', generated3DAssets.buildings?.features?.length);
-        console.log('Tree count:', generated3DAssets.trees?.features?.length);
         
         // Buildings
         const buildingsSourceId = 'procedural-buildings';
@@ -696,78 +694,6 @@ const IndianUrbanForm = () => {
       });
       mapRef.current.on("mouseleave", "zones-fill", () => {
         mapRef.current.getCanvas().style.cursor = "";
-      });
-    } else {
-      // Render Markers
-      cityZones.forEach((area, index) => {
-        // Skip if coordinates are invalid
-        if (!area.lat || !area.lng || isNaN(area.lat) || isNaN(area.lng)) {
-          console.warn(`⚠️ Skipping district "${area.name}" - invalid coordinates:`, area.lat, area.lng);
-          return;
-        }
-        
-        const regulation =
-          zoningRegulations[area.type] || zoningRegulations.residential;
-
-        const el = document.createElement("div");
-        el.className = "custom-marker";
-        el.style.backgroundColor = area.color || regulation.color;
-        el.style.width = "20px";
-        el.style.height = "20px";
-        el.style.borderRadius = "50%";
-        el.style.border = "3px solid white";
-        el.style.cursor = "pointer";
-        el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-        
-        // Add district label
-        const labelEl = document.createElement("div");
-        labelEl.textContent = area.name;
-        labelEl.style.position = "absolute";
-        labelEl.style.top = "24px";
-        labelEl.style.left = "50%";
-        labelEl.style.transform = "translateX(-50%)";
-        labelEl.style.fontSize = "11px";
-        labelEl.style.fontWeight = "600";
-        labelEl.style.color = "#1e293b";
-        labelEl.style.backgroundColor = "rgba(255, 255, 255, 0.95)";
-        labelEl.style.padding = "2px 6px";
-        labelEl.style.borderRadius = "4px";
-        labelEl.style.boxShadow = "0 1px 3px rgba(0,0,0,0.2)";
-        labelEl.style.whiteSpace = "nowrap";
-        labelEl.style.pointerEvents = "none";
-        
-        const containerEl = document.createElement("div");
-        containerEl.style.position = "relative";
-        containerEl.appendChild(el);
-        containerEl.appendChild(labelEl);
-
-        const currencySymbol = area.currency === 'USD' ? '$' : area.currency === 'SGD' ? 'S$' : '₹';
-        const popupContent =
-          '<div style="padding: 8px;">' +
-          '<h3 style="font-weight: bold; margin-bottom: 4px;">' +
-          area.name +
-          "</h3>" +
-          `<p style="font-size: 12px; color: #666;">${currencySymbol}` +
-          area.price.toLocaleString() +
-          "/sqft</p>" +
-          '<p style="font-size: 12px; color: #666; text-transform: capitalize;">Type: ' +
-          area.type +
-          "</p>" +
-          "</div>";
-
-        const popup = new maptilersdk.Popup({ offset: 25 }).setHTML(
-          popupContent
-        );
-        const marker = new maptilersdk.Marker({ element: containerEl })
-          .setLngLat([area.lng, area.lat])
-          .setPopup(popup)
-          .addTo(mapRef.current);
-
-        marker.getElement().addEventListener("click", () => {
-          handleAreaClick(area);
-        });
-
-        markersRef.current.push(marker);
       });
     }
   };
@@ -1972,11 +1898,6 @@ const IndianUrbanForm = () => {
             </div>
           </div>
         )}
-
-        {/* Attribution Explanation */}
-        <div className="absolute bottom-1 right-1 text-[10px] text-slate-400 bg-white/80 px-1 rounded pointer-events-none">
-          MapTiler © OpenStreetMap contributors
-        </div>
       </div>
     </div>
   );
