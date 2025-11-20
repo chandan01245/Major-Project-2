@@ -7,6 +7,8 @@
 [build.environment]
   NODE_VERSION = "16"
   CI = "false"
+  # Backend URL should be set in Netlify UI environment variables
+  # REACT_APP_BACKEND_URL will be injected during build
 
 # Redirect all routes to index.html for React Router
 [[redirects]]

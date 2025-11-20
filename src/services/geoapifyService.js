@@ -1,14 +1,15 @@
-const API_KEY = process.env.REACT_APP_GEOAPIFY_KEY;
-const MAPTILER_KEY = process.env.REACT_APP_MAPTILER_KEY;
+// Backend API base URL
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 
 // MapTiler Dataset URLs for district boundaries
-const CITY_DATASET_URLS = {
-  'new_york': `https://api.maptiler.com/data/019aa059-342d-7712-9c10-71535fc0cbc5/features.json?key=${MAPTILER_KEY}`,
-  'bangalore': `https://api.maptiler.com/data/019aa070-b0b8-78d9-a86b-c740520e8340/features.json?key=${MAPTILER_KEY}`,
-  'mumbai': `https://api.maptiler.com/data/019aa060-e972-79a2-a841-fc947c3cb1b5/features.json?key=${MAPTILER_KEY}`,
-  'hyderabad': `https://api.maptiler.com/data/019aa06c-d6d8-7d2b-a5b7-3d5649594046/features.json?key=${MAPTILER_KEY}`,
-  'delhi': `https://api.maptiler.com/data/019aa069-2cf7-7a39-9b94-4c8007355b2d/features.json?key=${MAPTILER_KEY}`, 
-  'singapore': `https://api.maptiler.com/data/019aa070-188e-77be-9af4-d1577f8328ba/features.json?key=${MAPTILER_KEY}`
+// These will be proxied through backend for production
+const CITY_DATASET_IDS = {
+  'new_york': '019aa059-342d-7712-9c10-71535fc0cbc5',
+  'bangalore': '019aa070-b0b8-78d9-a86b-c740520e8340',
+  'mumbai': '019aa060-e972-79a2-a841-fc947c3cb1b5',
+  'hyderabad': '019aa06c-d6d8-7d2b-a5b7-3d5649594046',
+  'delhi': '019aa069-2cf7-7a39-9b94-4c8007355b2d', 
+  'singapore': '019aa070-188e-77be-9af4-d1577f8328ba'
 };
 
 // Fallback hardcoded districts for cities without datasets
@@ -18,9 +19,8 @@ const CITY_DISTRICTS = {
 
 class GeoapifyService {
   constructor() {
-    if (!API_KEY) {
-      console.warn('Geoapify API Key is missing! Please add REACT_APP_GEOAPIFY_KEY to your .env file.');
-    }
+    // API keys are now handled by backend proxy
+    console.log('🔒 GeoapifyService initialized with backend proxy');
   }
 
   getCityCurrency(cityId) {
@@ -80,12 +80,13 @@ class GeoapifyService {
    */
   async getCityDistricts(cityId, cityName) {
     
-    // Check if we have a specific dataset URL for this city
-    const datasetUrl = CITY_DATASET_URLS[cityId.toLowerCase()];
-    if (datasetUrl) {
+    // Check if we have a specific dataset ID for this city
+    const datasetId = CITY_DATASET_IDS[cityId.toLowerCase()];
+    if (datasetId) {
       try {
         console.log(`Fetching ${cityName} districts from MapTiler Dataset...`);
-        const response = await fetch(datasetUrl);
+        // Use backend proxy to fetch dataset
+        const response = await fetch(`${BACKEND_URL}/api/proxy/maptiler/dataset/${datasetId}`);
         const data = await response.json();
         
         if (data.features) {
@@ -140,8 +141,6 @@ class GeoapifyService {
         // Fallback to default logic if this fails
       }
     }
-
-    if (!API_KEY) return [];
     
     try {
       console.log(`🌍 Fetching districts for ${cityName} using Hardcoded List...`);
@@ -167,8 +166,8 @@ class GeoapifyService {
         // Ensure we query specifically for the city to avoid ambiguity
         const query = name.toLowerCase().includes(cityName.toLowerCase()) ? name : `${name}, ${cityName}`;
         
-        // 1. Search for the place to get its ID
-        const searchUrl = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(query)}&limit=1&apiKey=${API_KEY}`;
+        // 1. Search for the place to get its ID (via backend proxy)
+        const searchUrl = `${BACKEND_URL}/api/proxy/geoapify/search?text=${encodeURIComponent(query)}&limit=1`;
         const searchResponse = await fetch(searchUrl);
         const searchData = await searchResponse.json();
 
@@ -246,7 +245,7 @@ class GeoapifyService {
 
   async getBoundaryForPlaceId(placeId) {
     try {
-      const url = `https://api.geoapify.com/v1/boundaries/place?id=${placeId}&geometry=geometry_1000&apiKey=${API_KEY}`;
+      const url = `${BACKEND_URL}/api/proxy/geoapify/boundary?id=${placeId}&geometry=geometry_1000`;
       const response = await fetch(url);
       if (!response.ok) return null;
       
@@ -296,12 +295,10 @@ class GeoapifyService {
    * Get amenities using Places API
    */
   async getAmenities(lat, lng, categories = ['education.school', 'healthcare.hospital', 'leisure.park', 'public_transport']) {
-    if (!API_KEY) return [];
-
     try {
       const categoryString = categories.join(',');
       const radius = 5000; // 5km radius
-      const url = `https://api.geoapify.com/v2/places?categories=${categoryString}&filter=circle:${lng},${lat},${radius}&limit=20&apiKey=${API_KEY}`;
+      const url = `${BACKEND_URL}/api/proxy/geoapify/places?categories=${categoryString}&filter=circle:${lng},${lat},${radius}&limit=20`;
       
       const response = await fetch(url);
       const data = await response.json();

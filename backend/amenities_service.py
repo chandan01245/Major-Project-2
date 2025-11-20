@@ -4,7 +4,7 @@ import math
 
 class AmenitiesFinder:
     def __init__(self):
-        self.api_key = os.getenv('REACT_APP_MAPTILER_KEY') or os.getenv('MAPTILER_KEY')
+        self.api_key = os.getenv('REACT_APP_MAPTILER_KEY') 
         self.base_url = "https://api.maptiler.com/geocoding"
         print(f"🔑 AmenitiesFinder initialized with API key: {'✅ Yes' if self.api_key else '❌ No'}")
 

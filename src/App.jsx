@@ -259,11 +259,20 @@ const IndianUrbanForm = () => {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, selectedCity]);
 
-  const initializeMap = () => {
+  const initializeMap = async () => {
     if (mapRef.current || !mapContainerRef.current) return;
 
     try {
-      maptilersdk.config.apiKey = process.env.REACT_APP_MAPTILER_KEY;
+      // Fetch MapTiler API key from backend
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+      const keyResponse = await fetch(`${backendUrl}/api/config/maptiler-key`);
+      const keyData = await keyResponse.json();
+      
+      if (!keyData.key) {
+        throw new Error('Failed to get MapTiler API key');
+      }
+      
+      maptilersdk.config.apiKey = keyData.key;
 
       const map = new maptilersdk.Map({
         container: mapContainerRef.current,
