@@ -169,6 +169,7 @@ def generate_report():
         
         # Fetch real amenities
         amenities = amenities_finder.find_amenities(centroid_lat, centroid_lng)
+        print(f"🏫 Amenities fetched: {amenities}")
         
         # Predict AQI
         # For demo, we use a random current AQI if not provided
@@ -194,7 +195,8 @@ def generate_report():
             amenities=amenities,
             aqi_forecast=aqi_forecast,
             lightning_risk=lightning_risk,
-            road_condition=road_condition
+            road_condition=road_condition,
+            city=city
         )
         
         return jsonify({
@@ -240,6 +242,41 @@ def get_cities():
         'cities': cities,
         'statistics': city_stats
     })
+
+@app.route('/api/buildings/models', methods=['GET'])
+def get_building_models():
+    """Get list of available 3D building models"""
+    data_folder = os.path.join(os.path.dirname(__file__), 'data')
+    models = []
+    
+    for filename in os.listdir(data_folder):
+        if filename.endswith('.glb'):
+            models.append({
+                'filename': filename,
+                'name': filename.replace('.glb', '').replace('_', ' ').title(),
+                'url': f'/api/buildings/model/{filename}'
+            })
+    
+    return jsonify({
+        'success': True,
+        'models': models,
+        'count': len(models)
+    })
+
+@app.route('/api/buildings/model/<filename>', methods=['GET'])
+def get_building_model(filename):
+    """Serve a specific 3D building model file"""
+    from flask import send_from_directory
+    data_folder = os.path.join(os.path.dirname(__file__), 'data')
+    
+    # Security: only allow .glb files
+    if not filename.endswith('.glb'):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    try:
+        return send_from_directory(data_folder, filename, mimetype='model/gltf-binary')
+    except FileNotFoundError:
+        return jsonify({'error': 'Model not found'}), 404
 
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
 def delete_document(doc_id):

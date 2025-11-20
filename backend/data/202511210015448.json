@@ -1,0 +1,14 @@
+{
+  "id": "202511210015448",
+  "filename": "20251121_001115_New-york-city.pdf",
+  "city": "delhi",
+  "processed_at": "2025-11-21T00:15:44.463433",
+  "rules": [
+    {
+      "zone_type": "residential",
+      "max_height": 420,
+      "source_sentence": "a sun control device that is\naccessible for purposes other than for maintenance shall be considered a balcony;\n(10) floor space within stairwells:\n(i) at each floor of #buildings# containing #residences developed# or #enlarged# after april 16, 2008, that are greater than 125 feet in height, provided that:\n(a) such stairwells are located on a #story# containing #residences#;\n(b) such stairwells are used as a required means of egress from such #residences#;\n(c) such stairwells have a minimum width of 44 inches;\n(d) such floor space excluded from #floor area# shall be limited to a maximum of eight inches of stair and landing width measured along the length of the stairwell enclosure at each\nfloor; and\n(e) where such stairwells serve non-#residential uses# on any floor, or are located within multi-level #dwelling units#, the entire floor space within such stairwells on such floors shall\ncount as #floor area#;\n(ii) at each floor of #buildings developed# or #enlarged# after april 28, 2015, that are 420 feet or greater in height, provided that:\n(a) such stairwells serve a space with an occupancy group other than group r-2, as classified in the new york city building code, that is located at or above a height of 420 feet; and\n(b) such floor space excluded from #floor area# shall be limited to:\n(a) the 25 percent of stair and landing width required by the new york city building code which is provided in addition to the stair and landing widths required by such\ncode for means of egress; or\n(b) the one stairwell required by the new york city building code which is provided in addition to the stairwells required by such code for means of egress."
+    }
+  ],
+  "text_length": 466907
+}

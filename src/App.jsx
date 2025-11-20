@@ -48,6 +48,7 @@ const IndianUrbanForm = () => {
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [showDocumentPanel, setShowDocumentPanel] = useState(false);
   const [mapStyle, setMapStyle] = useState("streets");
+  const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [currentDrawingArea, setCurrentDrawingArea] = useState(0);
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [cityZones, setCityZones] = useState([]);
@@ -57,6 +58,9 @@ const IndianUrbanForm = () => {
   const [isLoading3D, setIsLoading3D] = useState(false);
   const [show3DView, setShow3DView] = useState(false);
   const [isLoadingZones, setIsLoadingZones] = useState(false);
+  const [generated3DAssets, setGenerated3DAssets] = useState(null);
+  const [buildingModels, setBuildingModels] = useState([]);
+  const [placedBuildings, setPlacedBuildings] = useState([]);
 
 
   
@@ -269,8 +273,10 @@ const IndianUrbanForm = () => {
         pitch: 0,
         bearing: 0,
         attributionControl: false,
-        terrain: true, // Enable 3D terrain
-        terrainControl: false, // We'll control this programmatically
+        terrain: false, // Disable terrain to avoid shader errors
+        terrainControl: false,
+        fadeDuration: 0, // Disable fade animation to prevent sprite loading issues
+        crossSourceCollisions: false, // Prevent collision detection issues
       });
 
       mapRef.current = map;
@@ -432,6 +438,12 @@ const IndianUrbanForm = () => {
 
   const updateMapVisualization = () => {
     if (!mapRef.current) return;
+    
+    // Safety check for draw control
+    if (!drawRef.current) {
+      console.warn('Draw control not initialized yet');
+      return;
+    }
 
     // Clear existing markers
     markersRef.current.forEach((marker) => marker.remove());
@@ -687,27 +699,56 @@ const IndianUrbanForm = () => {
       });
     } else {
       // Render Markers
-      cityZones.forEach((area) => {
+      cityZones.forEach((area, index) => {
+        // Skip if coordinates are invalid
+        if (!area.lat || !area.lng || isNaN(area.lat) || isNaN(area.lng)) {
+          console.warn(`⚠️ Skipping district "${area.name}" - invalid coordinates:`, area.lat, area.lng);
+          return;
+        }
+        
         const regulation =
           zoningRegulations[area.type] || zoningRegulations.residential;
 
         const el = document.createElement("div");
         el.className = "custom-marker";
-        el.style.backgroundColor = regulation.color;
+        el.style.backgroundColor = area.color || regulation.color;
         el.style.width = "20px";
         el.style.height = "20px";
         el.style.borderRadius = "50%";
         el.style.border = "3px solid white";
         el.style.cursor = "pointer";
         el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+        
+        // Add district label
+        const labelEl = document.createElement("div");
+        labelEl.textContent = area.name;
+        labelEl.style.position = "absolute";
+        labelEl.style.top = "24px";
+        labelEl.style.left = "50%";
+        labelEl.style.transform = "translateX(-50%)";
+        labelEl.style.fontSize = "11px";
+        labelEl.style.fontWeight = "600";
+        labelEl.style.color = "#1e293b";
+        labelEl.style.backgroundColor = "rgba(255, 255, 255, 0.95)";
+        labelEl.style.padding = "2px 6px";
+        labelEl.style.borderRadius = "4px";
+        labelEl.style.boxShadow = "0 1px 3px rgba(0,0,0,0.2)";
+        labelEl.style.whiteSpace = "nowrap";
+        labelEl.style.pointerEvents = "none";
+        
+        const containerEl = document.createElement("div");
+        containerEl.style.position = "relative";
+        containerEl.appendChild(el);
+        containerEl.appendChild(labelEl);
 
+        const currencySymbol = area.currency === 'USD' ? '$' : area.currency === 'SGD' ? 'S$' : '₹';
         const popupContent =
           '<div style="padding: 8px;">' +
           '<h3 style="font-weight: bold; margin-bottom: 4px;">' +
           area.name +
           "</h3>" +
-          '<p style="font-size: 12px; color: #666;">₹' +
-          area.value.toLocaleString() +
+          `<p style="font-size: 12px; color: #666;">${currencySymbol}` +
+          area.price.toLocaleString() +
           "/sqft</p>" +
           '<p style="font-size: 12px; color: #666; text-transform: capitalize;">Type: ' +
           area.type +
@@ -717,7 +758,7 @@ const IndianUrbanForm = () => {
         const popup = new maptilersdk.Popup({ offset: 25 }).setHTML(
           popupContent
         );
-        const marker = new maptilersdk.Marker({ element: el })
+        const marker = new maptilersdk.Marker({ element: containerEl })
           .setLngLat([area.lng, area.lat])
           .setPopup(popup)
           .addTo(mapRef.current);
@@ -792,16 +833,25 @@ const IndianUrbanForm = () => {
   };
 
   const calculatePolygonArea = (coordinates) => {
-    let area = 0;
-    const n = coordinates.length;
-    for (let i = 0; i < n - 1; i++) {
-      const [x1, y1] = coordinates[i];
-      const [x2, y2] = coordinates[i + 1];
-      area += x1 * y2 - x2 * y1;
+    // Use turf.js for accurate geodesic area calculation
+    try {
+      const polygon = turf.polygon([coordinates]);
+      const areaInSquareMeters = turf.area(polygon);
+      return Math.round(areaInSquareMeters);
+    } catch (error) {
+      console.error('Error calculating area:', error);
+      // Fallback to simple calculation
+      let area = 0;
+      const n = coordinates.length;
+      for (let i = 0; i < n - 1; i++) {
+        const [x1, y1] = coordinates[i];
+        const [x2, y2] = coordinates[i + 1];
+        area += x1 * y2 - x2 * y1;
+      }
+      area = Math.abs(area / 2);
+      const metersPerDegree = 111320;
+      return Math.round(area * metersPerDegree * metersPerDegree);
     }
-    area = Math.abs(area / 2);
-    const metersPerDegree = 111320;
-    return Math.round(area * metersPerDegree * metersPerDegree);
   };
 
   const handleDrawCreate = async (e) => {
@@ -814,8 +864,11 @@ const IndianUrbanForm = () => {
       ]);
       setDrawnPolygon(coordinates);
       setIsDrawingMode(false);
-      setCurrentDrawingArea(0);
-      setDrawingPoints([]);
+      
+      // Calculate and set the area properly
+      const area = calculatePolygonArea(coordinates);
+      setCurrentDrawingArea(area);
+      setDrawingPoints(coordinates.length - 1);
 
       // Reset cursor
       if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
@@ -828,19 +881,38 @@ const IndianUrbanForm = () => {
         );
       }
 
+      // The building3DService handles loading models and placement internally
+      // Just call it to place buildings in the parcel
+
       // Auto-tilt map for 3D view first
       if (mapRef.current) {
-        mapRef.current.easeTo({
-          pitch: 60,
-          bearing: -17.6,
-          duration: 2000,
+        // Zoom to parcel first
+        const bounds = coordinates.reduce((acc, coord) => {
+          return [
+            [Math.min(acc[0][0], coord[0]), Math.min(acc[0][1], coord[1])],
+            [Math.max(acc[1][0], coord[0]), Math.max(acc[1][1], coord[1])]
+          ];
+        }, [[Infinity, Infinity], [-Infinity, -Infinity]]);
+
+        mapRef.current.fitBounds(bounds, {
+          padding: { top: 100, bottom: 100, left: 100, right: 100 },
+          duration: 1000
         });
 
-        // Wait for animation and 3D tiles to load
+        // Then tilt for 3D view
         setTimeout(() => {
-          setShow3DView(true);
-          setIsLoading3D(false);
-        }, 2500);
+          mapRef.current.easeTo({
+            pitch: 60,
+            bearing: -17.6,
+            duration: 2000,
+          });
+
+          // Wait for animation and 3D tiles to load
+          setTimeout(() => {
+            setShow3DView(true);
+            setIsLoading3D(false);
+          }, 2500);
+        }, 1200);
       } else {
         setShow3DView(true);
         setIsLoading3D(false);
@@ -891,6 +963,7 @@ const IndianUrbanForm = () => {
     setShow3DView(false);
     building3DService.removeAllBuildings(mapRef.current);
     setIsLoading3D(false);
+    setGenerated3DAssets(null);
 
     // Reset map view
     if (mapRef.current) {
@@ -1119,45 +1192,147 @@ const IndianUrbanForm = () => {
 
   const changeMapStyle = (style) => {
     if (!mapRef.current) return;
+    
+    // Prevent style changes while already changing or map is still loading
+    if (isChangingStyle) {
+      console.warn('Style change already in progress, please wait...');
+      return;
+    }
+    
+    if (!mapRef.current.isStyleLoaded()) {
+      console.warn('Map style still loading, please wait...');
+      return;
+    }
+    
+    setIsChangingStyle(true);
+    console.log('🗺️ Changing map style to:', style);
+    
     try {
       const styles = {
         streets: maptilersdk.MapStyle.STREETS,
         satellite: maptilersdk.MapStyle.SATELLITE,
         outdoor: maptilersdk.MapStyle.OUTDOOR,
+        hybrid: maptilersdk.MapStyle.HYBRID,
+        dataviz: maptilersdk.MapStyle.DATAVIZ,
       };
 
+      // Save current map state
+      const currentCenter = mapRef.current.getCenter();
+      const currentZoom = mapRef.current.getZoom();
+      const currentPitch = mapRef.current.getPitch();
+      const currentBearing = mapRef.current.getBearing();
+
+      // Remove existing controls
       if (drawRef.current && drawControlAddedRef.current) {
         try {
           mapRef.current.removeControl(drawRef.current);
           drawControlAddedRef.current = false;
         } catch (e) {
-          console.warn(e);
+          console.warn("Error removing draw control:", e);
         }
       }
-
-      mapRef.current.setStyle(styles[style] || maptilersdk.MapStyle.STREETS);
+      
+      const targetStyle = styles[style] || maptilersdk.MapStyle.STREETS;
+      
+      // Add error listener before changing style
+      const onStyleError = (error) => {
+        console.error('❌ Style load error:', error);
+        setIsChangingStyle(false);
+        // Try to recover to streets view
+        if (style !== 'streets') {
+          setTimeout(() => {
+            try {
+              mapRef.current.setStyle(maptilersdk.MapStyle.STREETS, { diff: false });
+              setMapStyle('streets');
+            } catch (e) {
+              console.error('Recovery failed:', e);
+            }
+          }, 500);
+        }
+      };
+      
+      mapRef.current.once('error', onStyleError);
+      
+      // Set the new style with options to prevent shader/sprite errors
+      mapRef.current.setStyle(targetStyle, { 
+        diff: false, // Use diff:false to avoid partial updates
+        fadeDuration: 0, // Disable fade to prevent sprite loading issues
+        crossSourceCollisions: false
+      });
       setMapStyle(style);
 
-      mapRef.current.once("styledata", () => {
+      // Wait for the style to fully load before resuming
+      const onStyleLoad = () => {
+        // Remove error listener since we loaded successfully
+        mapRef.current.off('error', onStyleError);
+        console.log('✅ Style loaded successfully');
+        
+        // Wait a bit longer to ensure all resources are ready
         setTimeout(() => {
-          // Re-add 3D buildings after style change
-          add3DBuildingsLayer();
-          
-          if (selectedCity) updateMapVisualization();
-          else renderCityMarkers();
-
-          if (drawRef.current && !drawControlAddedRef.current) {
+          try {
+            // Restore map state
+            mapRef.current.jumpTo({
+              center: currentCenter,
+              zoom: currentZoom,
+              pitch: currentPitch,
+              bearing: currentBearing
+            });
+            
+            // Re-add 3D buildings after style change (with error handling)
             try {
-              mapRef.current.addControl(drawRef.current, "bottom-right");
-              drawControlAddedRef.current = true;
+              add3DBuildingsLayer();
             } catch (e) {
-              console.warn(e);
+              console.warn("Could not add 3D buildings layer:", e);
             }
+            
+            if (selectedCity) {
+              try {
+                updateMapVisualization();
+              } catch (e) {
+                console.warn("Error updating visualization:", e);
+              }
+            } else {
+              renderCityMarkers();
+            }
+
+            // Re-add draw controls
+            if (drawRef.current && !drawControlAddedRef.current) {
+              try {
+                mapRef.current.addControl(drawRef.current, "bottom-right");
+                drawControlAddedRef.current = true;
+              } catch (e) {
+                console.warn("Error adding draw control:", e);
+              }
+            }
+            
+            // Re-enable style changes
+            setIsChangingStyle(false);
+          } catch (e) {
+            console.error("Error in style reload:", e);
+            setIsChangingStyle(false);
           }
-        }, 500);
-      });
+        }, 800);
+      };
+
+      // Listen for successful style load
+      mapRef.current.once("style.load", onStyleLoad);
+
     } catch (error) {
       console.error("Error changing map style:", error);
+      setIsChangingStyle(false);
+      
+      // Reset to streets on error
+      if (mapRef.current && style !== 'streets') {
+        try {
+          console.log('🔄 Attempting recovery to streets style...');
+          mapRef.current.setStyle(maptilersdk.MapStyle.STREETS, { diff: false });
+          setMapStyle('streets');
+          setTimeout(() => setIsChangingStyle(false), 1000);
+        } catch (e) {
+          console.error("Fatal map style error:", e);
+          setIsChangingStyle(false);
+        }
+      }
     }
   };
 
@@ -1385,7 +1560,6 @@ const IndianUrbanForm = () => {
                       <button
                         key={idx}
                         onClick={() => {
-                          flyToArea(area);
                           handleAreaClick(area);
                         }}
                         className="w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 transition-all text-left flex items-center gap-3"
@@ -1494,28 +1668,72 @@ const IndianUrbanForm = () => {
 
         {/* Map Controls - Moved to Top Center */}
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-10">
+          {isChangingStyle && (
+            <div className="bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              <span className="text-sm text-slate-700">Changing map style...</span>
+            </div>
+          )}
           <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1">
             <button
               onClick={() => changeMapStyle("streets")}
+              disabled={isChangingStyle}
               className={`p-2 rounded-lg transition-colors ${
                 mapStyle === "streets"
                   ? "bg-emerald-100 text-emerald-700"
                   : "hover:bg-slate-100 text-slate-700"
-              }`}
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
               title="Streets View"
             >
               <MapPin className="w-5 h-5" />
             </button>
             <button
+              onClick={() => changeMapStyle("outdoor")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "outdoor"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Outdoor View"
+            >
+              <Building2 className="w-5 h-5" />
+            </button>
+            <button
               onClick={() => changeMapStyle("satellite")}
+              disabled={isChangingStyle}
               className={`p-2 rounded-lg transition-colors ${
                 mapStyle === "satellite"
                   ? "bg-emerald-100 text-emerald-700"
                   : "hover:bg-slate-100 text-slate-700"
-              }`}
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
               title="Satellite View"
             >
+              <Globe className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => changeMapStyle("hybrid")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "hybrid"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Hybrid View"
+            >
               <Layers className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => changeMapStyle("dataviz")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "dataviz"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Dataviz View"
+            >
+              <Building className="w-5 h-5" />
             </button>
           </div>
 

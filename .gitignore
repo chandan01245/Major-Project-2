@@ -8,7 +8,8 @@
 node_modules/
 /.pnp
 .pnp.js
-package-lock.json
+# Don't ignore package-lock.json - needed for reproducible builds
+# package-lock.json
 
 # ============================================
 # Python Virtual Environment
@@ -125,11 +126,11 @@ backend/data/uploaded_docs/*
 !backend/data/uploaded_docs/.gitkeep
 backend/data/*.db
 backend/data/*.sqlite
-*.pdf
-*.doc
-*.docx
-*.txt
-uploads/
+backend/uploads/
+backend/zoning-documents/*.pdf
+backend/zoning-documents/*.doc
+backend/zoning-documents/*.docx
+!backend/zoning-documents/README.md
 
 # ============================================
 # Temporary Files
