@@ -885,7 +885,21 @@ const IndianUrbanForm = () => {
       console.log(`🏙️ Using ${zoneType} zoning parameters:`, params);
       console.log(`📍 Parcel coordinates:`, coordinates);
 
-      await building3DService.addBuildingsToParcel(mapRef.current, coordinates, zoneType, params);
+      // Generate procedural 3D assets (buildings and trees)
+      const buildings = procedural3DService.generateBuildings(coordinates, 8, params);
+      const trees = procedural3DService.generateTrees(coordinates, buildings, 15);
+      
+      // Set generated assets for rendering in updateMapVisualization
+      setGenerated3DAssets({
+        buildings,
+        trees
+      });
+      
+      console.log('✅ Generated 3D assets:', { 
+        buildingCount: buildings.features.length, 
+        treeCount: trees.features.length 
+      });
+
 
     }
   };

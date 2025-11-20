@@ -786,11 +786,22 @@ pytest --cov             # With coverage
 
 ---
 
-## 📦 Deployment & Production
+## 📦 Deployment
 
-### **Quick Deployment Guide**
+### **Quick Deploy (10 Minutes)**
 
-#### Option 1: Vercel (Frontend) + Railway (Backend) ⭐ **Recommended**
+See **[QUICK_DEPLOY.md](QUICK_DEPLOY.md)** for fastest deployment.
+
+Full guide: **[DEPLOYMENT.md](DEPLOYMENT.md)**
+
+**Recommended Options**:
+1. **Render** (Free, easiest) - Both frontend & backend
+2. **Docker** (Self-hosted) - One container, port 5000
+3. **Railway** (Auto-detect) - Zero config
+
+### **Detailed Deployment Guides**
+
+#### Option 1: Render (Free Tier) ⭐ **Recommended**
 
 **Frontend on Vercel:**
 ```bash

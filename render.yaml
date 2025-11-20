@@ -1,0 +1,25 @@
+services:
+  # Backend Service (Python Flask)
+  - type: web
+    name: urbanform-backend
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && gunicorn -w 4 -b 0.0.0.0:$PORT app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.18
+      - key: FLASK_ENV
+        value: production
+    healthCheckPath: /api/health
+    
+  # Frontend Service (React)
+  - type: web
+    name: urbanform-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./build
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: REACT_APP_BACKEND_URL
+        sync: false  # Set manually in Render dashboard

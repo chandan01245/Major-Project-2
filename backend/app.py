@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import requests
@@ -6,7 +6,7 @@ from datetime import datetime
 from zoning_ml_model import ZoningMLModel
 from document_processor import DocumentProcessor
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
 # Initialize ML model and document processor
@@ -370,16 +370,42 @@ def proxy_geoapify_places():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Serve React frontend in production (when static folder exists)
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve React build in production"""
+    if path and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
+        return send_from_directory(app.static_folder, 'index.html')
+    else:
+        # Development mode - API only
+        return jsonify({
+            'message': 'UrbanForm Pro API',
+            'version': '2.0.0',
+            'status': 'running',
+            'note': 'Frontend not built. Run in development mode or build React app.'
+        })
+
 if __name__ == '__main__':
     print("🚀 Starting ML-Powered Zoning Regulation Backend...")
     print("📊 Loading pre-trained models...")
-    
+
     # Load any existing trained models
     if os.path.exists('models/zoning_model.pkl'):
         ml_model.load_model('models/zoning_model.pkl')
         print("✅ Loaded existing trained model")
     else:
         print("⚠️  No pre-trained model found. Upload documents to train.")
+
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('FLASK_ENV', 'development') != 'production'
     
-    print("🌐 Server running on http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print(f"🌐 Server running on http://0.0.0.0:{port}")
+    if os.path.exists('static/index.html'):
+        print("✅ Serving React frontend from /static")
+    else:
+        print("ℹ️  API-only mode (frontend not built)")
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)

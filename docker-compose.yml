@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  urbanform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: urbanform-pro
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+    volumes:
+      # Persist uploaded documents and models
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
+      - ./backend/zoning-documents:/app/zoning-documents
+      - ./backend/models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  data:
+  uploads:
+  documents:
+  models:
