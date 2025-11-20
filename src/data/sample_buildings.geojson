@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "b1", "building:levels": 3 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.5946, 12.9716],
+            [77.5948, 12.9716],
+            [77.5948, 12.9718],
+            [77.5946, 12.9718],
+            [77.5946, 12.9716]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "b2", "height": 18 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.595, 12.9714],
+            [77.5952, 12.9714],
+            [77.5952, 12.9716],
+            [77.595, 12.9716],
+            [77.595, 12.9714]
+          ]
+        ]
+      }
+    }
+  ]
+}

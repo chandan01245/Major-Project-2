@@ -1,0 +1,14 @@
+{
+  "id": "202511191650020",
+  "filename": "20251119_164955_Bangalore-2015.pdf",
+  "city": "bangalore",
+  "processed_at": "2025-11-19T16:50:02.495835",
+  "rules": [
+    {
+      "zone_type": "residential",
+      "ground_coverage": 60,
+      "source_sentence": "far\nroad width (m) coverage\n60% 2.00\nless than 12.0\n55% 2.25\nabove 12 and up to 18\n55% 2.50\nabove 18 and up to 24\n50% 3.00\nabove 24 m and up to 30\n50 % 3.25\nabove 30.0 m\n- 4 5 -\n7.2 ) regulations for non residential development plan and flatted factories\nthe non residential development plan and flatted industries are approved on the following\nconditions:\na."
+    }
+  ],
+  "text_length": 107857
+}
