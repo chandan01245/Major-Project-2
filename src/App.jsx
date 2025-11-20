@@ -26,10 +26,10 @@ import { useEffect, useRef, useState } from "react";
 import ReportPreview from "./components/ReportPreview";
 import { cities } from "./config/cities";
 import sampleBuildings from "./data/sample_buildings.geojson";
+import building3DService from "./services/building3DService";
 import mapService from "./services/mapService";
 import mlService from "./services/mlServiceBackend";
 import pdfService from "./services/pdfService";
-import procedural3DService from "./services/procedural3DService";
 import trafficService from "./services/trafficService";
 
 const IndianUrbanForm = () => {
@@ -51,14 +51,15 @@ const IndianUrbanForm = () => {
   const [currentDrawingArea, setCurrentDrawingArea] = useState(0);
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [cityZones, setCityZones] = useState([]);
-  const [isLoadingZones, setIsLoadingZones] = useState(false);
   const [showZoneOverlays, setShowZoneOverlays] = useState(false);
   const [showZoningModal, setShowZoningModal] = useState(false);
-  const [show3DView, setShow3DView] = useState(false);
   const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
   const [isLoading3D, setIsLoading3D] = useState(false);
-  const [generated3DAssets, setGenerated3DAssets] = useState(null);
+  const [show3DView, setShow3DView] = useState(false);
+  const [isLoadingZones, setIsLoadingZones] = useState(false);
 
+
+  
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -197,12 +198,10 @@ const IndianUrbanForm = () => {
 
   // Update map markers/polygons when zones change or toggle changes
   useEffect(() => {
-    // Allow updates if city is selected OR if we have 3D assets to render
-    if (mapLoaded && (selectedCity || generated3DAssets)) {
-      console.log('🔄 updateMapVisualization triggered', { selectedCity: !!selectedCity, generated3DAssets: !!generated3DAssets });
+    if (mapLoaded && selectedCity) {
       updateMapVisualization();
     }
-  }, [cityZones, showZoneOverlays, mapLoaded, selectedCity, generatedReport, generated3DAssets]); // Added generated3DAssets dependency
+  }, [cityZones, showZoneOverlays, mapLoaded, selectedCity, generatedReport]);
 
   const fetchExistingDocuments = async (cityId) => {
     try {
@@ -879,16 +878,7 @@ const IndianUrbanForm = () => {
       console.log(`🏙️ Using ${zoneType} zoning parameters:`, params);
       console.log(`📍 Parcel coordinates:`, coordinates);
 
-      const buildings = procedural3DService.generateBuildings(coordinates, 8, params);
-      const trees = procedural3DService.generateTrees(coordinates, buildings, 25);
-      
-      console.log(`📊 Generated assets:`, {
-        buildings: buildings.features.length,
-        trees: trees.features.length,
-        buildingSample: buildings.features[0]?.geometry?.coordinates
-      });
-      
-      setGenerated3DAssets({ buildings, trees });
+      await building3DService.addBuildingsToParcel(mapRef.current, coordinates, zoneType, params);
 
     }
   };
@@ -899,8 +889,8 @@ const IndianUrbanForm = () => {
     setCurrentDrawingArea(0);
     setDrawingPoints([]);
     setShow3DView(false);
+    building3DService.removeAllBuildings(mapRef.current);
     setIsLoading3D(false);
-    setGenerated3DAssets(null);
 
     // Reset map view
     if (mapRef.current) {
