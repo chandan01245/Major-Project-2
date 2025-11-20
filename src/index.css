@@ -29,3 +29,7 @@ body {
 .custom-marker:hover {
   transform: scale(1.2);
 }
+.mapbox-gl-draw_ctrl-draw-btn,
+.mapbox-gl-draw_ctrl-trash {
+  display: none !important;
+}
