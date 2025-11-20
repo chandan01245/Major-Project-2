@@ -1,0 +1,60 @@
+services:
+  # Backend Python Flask API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: urbanform-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - MAPTILER_KEY=${MAPTILER_KEY}
+      - REACT_APP_MAPTILER_KEY=${MAPTILER_KEY}
+    volumes:
+      # Persist uploaded documents and trained models
+      - ./backend/zoning-documents:/app/zoning-documents
+      - ./backend/models:/app/models
+      - ./backend/data:/app/data
+      - backend-uploads:/app/uploads
+    networks:
+      - urbanform-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_MAPTILER_KEY=${MAPTILER_KEY}
+        - REACT_APP_API_URL=http://localhost:5000/api
+    container_name: urbanform-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - urbanform-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  backend-uploads:
+    driver: local
+
+networks:
+  urbanform-network:
+    driver: bridge

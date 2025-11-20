@@ -260,3 +260,22 @@ generated/
 # ============================================
 api-docs/
 swagger-output.json
+
+# ============================================
+# Docker
+# ============================================
+# Exclude Docker volumes and temporary files
+backend/uploads/
+backend/zoning-documents/*/
+!backend/zoning-documents/.gitkeep
+backend/models/*.pkl
+backend/models/*.h5
+
+# Keep Docker configuration files (these should be committed)
+# docker-compose.yml
+# Dockerfile
+# .dockerignore
+# nginx.conf
+
+# Summary file (optional - for documentation only)
+DOCKERIZATION_SUMMARY.md

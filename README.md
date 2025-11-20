@@ -52,12 +52,38 @@
 
 ## 🚀 Quick Start
 
+> **🐳 Prefer Docker?** See [DOCKER.md](DOCKER.md) for simplified Docker deployment instructions.
+
 ### Prerequisites
 - **Node.js** v16+ and npm/yarn
 - **Python** 3.9+ (for backend ML services)
 - **MapTiler API Key** (free tier: 100,000 map loads/month)
+- **Docker** (optional - for containerized deployment)
 
-### Installation
+### Option 1: Docker Deployment (Recommended)
+
+The easiest way to run the entire application:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/urbanform-pro.git
+cd urbanform-pro
+
+# 2. Create .env file from example
+cp .env.example .env
+# Edit .env and add your MAPTILER_KEY
+
+# 3. Build and run with Docker Compose
+docker-compose up --build
+
+# Access the application at:
+# Frontend: http://localhost:3000
+# Backend: http://localhost:5000/api
+```
+
+See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
+
+### Option 2: Manual Installation
 
 #### 1️⃣ **Clone the Repository**
 ```bash
