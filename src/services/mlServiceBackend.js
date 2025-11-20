@@ -152,29 +152,13 @@ class MLServiceBackend {
 
       elements.forEach(el => {
         if (el.tags) {
-          // Get coordinates - for ways, calculate center
-          let elLat = el.lat;
-          let elLon = el.lon;
-          
-          // If it's a way (building), we need to calculate the center from bounds or members
-          if (!elLat && el.center) {
-            elLat = el.center.lat;
-            elLon = el.center.lon;
-          }
-          
-          // Skip if we still don't have coordinates
-          if (!elLat || !elLon) return;
-          
           const name = el.tags.name || 'Unnamed';
-          const distance = this._calculateDistance(lat, lng, elLat, elLon);
-          
-          // Skip if distance is invalid (but allow 0 for very close amenities)
-          if (distance === null || distance === undefined || isNaN(distance)) return;
+          const distance = parseFloat(this._calculateDistance(lat, lng, el.lat, el.lon).toFixed(1));
           
           if (el.tags.amenity === 'school') {
-            schools.push({ name, distance, lat: elLat, lon: elLon });
+            schools.push({ name, distance });
           } else if (el.tags.amenity === 'hospital') {
-            hospitals.push({ name, distance, lat: elLat, lon: elLon });
+            hospitals.push({ name, distance });
           } else if (el.tags.railway === 'subway_entrance' || el.tags.station === 'subway') {
             const time = Math.round(distance * 3); // Approx 3 mins per km (20km/h avg in city)
             metro.push({ name: el.tags.name || 'Metro Station', distance, time: `${time} min`, line: el.tags.line || 'Metro' });
@@ -183,87 +167,33 @@ class MLServiceBackend {
       });
 
       // Sort by distance and take top 3
-      // Calculate walking (5 km/h) and driving (40 km/h) times
-      const schoolsData = schools.sort((a, b) => a.distance - b.distance).slice(0, 3).map(s => ({
-        name: s.name,
-        distance: s.distance < 0.1 ? parseFloat(s.distance.toFixed(3)) : parseFloat(s.distance.toFixed(2)),
-        walking_time: Math.max(1, parseFloat(((s.distance / 5) * 60).toFixed(1))),
-        driving_time: Math.max(1, parseFloat(((s.distance / 40) * 60).toFixed(1))),
-        rating: (4 + Math.random()).toFixed(1)
-      }));
-      
-      const hospitalsData = hospitals.sort((a, b) => a.distance - b.distance).slice(0, 3).map(h => ({
-        name: h.name,
-        distance: h.distance < 0.1 ? parseFloat(h.distance.toFixed(3)) : parseFloat(h.distance.toFixed(2)),
-        walking_time: Math.max(1, parseFloat(((h.distance / 5) * 60).toFixed(1))),
-        driving_time: Math.max(1, parseFloat(((h.distance / 40) * 60).toFixed(1))),
-        rating: (4 + Math.random()).toFixed(1)
-      }));
-      
-      const transportData = metro.sort((a, b) => a.distance - b.distance).slice(0, 3).map(m => ({
-        name: m.name,
-        distance: m.distance < 0.1 ? parseFloat(m.distance.toFixed(3)) : parseFloat(m.distance.toFixed(2)),
-        walking_time: Math.max(1, parseFloat(((m.distance / 5) * 60).toFixed(1))),
-        driving_time: Math.max(1, parseFloat(((m.distance / 40) * 60).toFixed(1))),
-        line: m.line || 'Metro'
-      }));
-      
-      // If no data found, use fallback
       return {
-        schools: schoolsData.length > 0 ? schoolsData : [
-          { name: 'Nearby School', distance: 1.2, walking_time: 14.4, driving_time: 1.8, rating: '4.2' },
-          { name: 'Public School', distance: 2.5, walking_time: 30.0, driving_time: 3.8, rating: '4.0' },
-          { name: 'High School', distance: 3.8, walking_time: 45.6, driving_time: 5.7, rating: '4.3' }
-        ],
-        hospitals: hospitalsData.length > 0 ? hospitalsData : [
-          { name: 'City Hospital', distance: 2.5, walking_time: 30.0, driving_time: 3.8, rating: '4.5' },
-          { name: 'Medical Center', distance: 4.1, walking_time: 49.2, driving_time: 6.2, rating: '4.3' },
-          { name: 'Clinic', distance: 1.8, walking_time: 21.6, driving_time: 2.7, rating: '4.1' }
-        ],
-        transport: transportData.length > 0 ? transportData : [
-          { name: 'Metro Station', distance: 1.8, walking_time: 21.6, driving_time: 2.7, line: 'Metro' },
-          { name: 'Bus Stop', distance: 0.8, walking_time: 9.6, driving_time: 1.2, line: 'Bus' }
-        ],
-        parks: [] // Add empty parks array
+        schools: schools.sort((a, b) => a.distance - b.distance).slice(0, 3).map(s => ({...s, distance: s.distance.toFixed(1), time: `${Math.round(s.distance * 3)} min`, rating: (4 + Math.random()).toFixed(1)})),
+        hospitals: hospitals.sort((a, b) => a.distance - b.distance).slice(0, 3).map(h => ({...h, distance: h.distance.toFixed(1), time: `${Math.round(h.distance * 3)} min`, rating: (4 + Math.random()).toFixed(1)})),
+        metro: metro.sort((a, b) => a.distance - b.distance).slice(0, 3).map(m => ({...m, distance: m.distance.toFixed(1)}))
       };
 
     } catch (error) {
       console.error('Error fetching amenities from Overpass:', error);
       // Fallback to mock data if Overpass fails
       return {
-        schools: [
-          { name: 'Local School', distance: 1.2, walking_time: 14.4, driving_time: 1.8 },
-          { name: 'City High School', distance: 3.5, walking_time: 42.0, driving_time: 5.3 }
-        ],
-        hospitals: [
-          { name: 'City Hospital', distance: 2.5, walking_time: 30.0, driving_time: 3.8 },
-          { name: 'Medical Center', distance: 4.1, walking_time: 49.2, driving_time: 6.2 }
-        ],
-        transport: [
-          { name: 'Metro Station', distance: 1.8, walking_time: 21.6, driving_time: 2.7 },
-          { name: 'Bus Terminal', distance: 0.8, walking_time: 9.6, driving_time: 1.2 }
-        ],
-        parks: [
-          { name: 'Central Park', distance: 0.5, walking_time: 6.0, driving_time: 0.8 }
-        ]
+        schools: [{ name: 'Local School', distance: '1.2' }],
+        hospitals: [{ name: 'City Hospital', distance: '2.5' }],
+        metro: [{ name: 'Metro Station', distance: '1.8' }]
       };
     }
   }
 
   _calculateDistance(lat1, lon1, lat2, lon2) {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-    if (lat1 === lat2 && lon1 === lon2) return 0;
-    
-    const R = 6371; // Earth radius in km
+    if (!lat2 || !lon2) return 0;
+    const R = 6371; // km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-    
-    return distance > 0 ? distance : 0;
+    return R * c;
   }
 
   async generateReport(polygon, attributes, nearbyAreas, city = 'bangalore') {
@@ -276,7 +206,6 @@ class MLServiceBackend {
 
     // Fetch real amenities
     const amenities = await this._fetchAmenitiesFromOverpass(centroid[1], centroid[0]);
-    console.log('🏫 Amenities fetched:', amenities);
 
     if (!this.backendAvailable) {
       return this._frontendReportGeneration(polygon, attributes, nearbyAreas, amenities);

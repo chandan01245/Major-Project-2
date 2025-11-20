@@ -4,76 +4,81 @@
  */
 class Building3DService {
   constructor() {
-    this.models = [];
+    this.models = {
+      skyscraper: {
+        name: "Singapore Office Skyscraper",
+        path: "/backend/data/singapore_office_skyscraper_free.glb",
+        type: "commercial",
+        footprintArea: 400, // sq meters
+        height: 150, // meters
+        scale: 1.0,
+      },
+      residential: {
+        name: "Residential Family House",
+        path: "/backend/data/residential_family_house.glb",
+        type: "residential",
+        footprintArea: 150, // sq meters
+        height: 12, // meters
+        scale: 1.0,
+      },
+      lowrise: {
+        name: "Low Rise Office Building",
+        path: "/backend/data/low_rise_wall_to_wall_office_building.glb",
+        type: "commercial",
+        footprintArea: 250, // sq meters
+        height: 25, // meters
+        scale: 1.0,
+      },
+    };
+
     this.loadedModels = new Map();
     this.activeLayers = [];
-    this.apiUrl = 'http://localhost:5000/api';
   }
 
   /**
-   * Load building models from backend
+   * Select appropriate building model based on parcel area and zoning type
    */
-  async loadModels() {
-    if (this.models.length > 0) return this.models;
-    
-    try {
-      const response = await fetch(`${this.apiUrl}/buildings/models`);
-      const data = await response.json();
-      
-      if (data.success) {
-        this.models = data.models.map(model => ({
-          name: model.name,
-          filename: model.filename,
-          url: `${this.apiUrl}${model.url}`,
-          footprintArea: 60, // 5m x 12m = 60 sq meters
-          height: 15, // meters (increased for better visibility)
-          scale: 1.0
-        }));
-        
-        console.log(`🏢 Loaded ${this.models.length} building models from backend`);
-        return this.models;
-      }
-    } catch (error) {
-      console.error('Error loading building models:', error);
-      return [];
+  selectBuildingModel(parcelArea, zoningType = "commercial") {
+    // Parcel area is in square meters
+    const type = zoningType.toLowerCase();
+
+    // For residential zones, prefer residential model
+    if (type.includes("residential")) {
+      return this.models.residential;
+    }
+
+    // For commercial/mixed zones, choose based on size
+    if (parcelArea > 5000) {
+      return this.models.skyscraper; // Large parcels get skyscrapers
+    } else if (parcelArea > 1000) {
+      return this.models.lowrise; // Medium parcels get low-rise
+    } else {
+      return this.models.residential; // Small parcels get houses
     }
   }
 
   /**
-   * Get a random building model
+   * Calculate how many buildings can fit in the parcel
    */
-  getRandomBuildingModel() {
-    if (this.models.length === 0) return null;
-    return this.models[Math.floor(Math.random() * this.models.length)];
+  calculateBuildingCount(parcelArea, buildingModel) {
+    const footprintWithSpacing = buildingModel.footprintArea * 2; // Include spacing
+    const maxBuildings = Math.floor(parcelArea / footprintWithSpacing);
+    
+    // Cap at reasonable number for performance
+    return Math.min(maxBuildings, 10);
   }
 
   /**
-   * Calculate how many buildings can fit in the parcel based on area
-   */
-  calculateBuildingCount(parcelArea) {
-    // Building footprint: 5m x 12m = 60 sq meters
-    const buildingFootprint = 60;
-    
-    // Each building needs space around it (3m on all sides)
-    // Effective area per building: (5+6)m x (12+6)m = 11m x 18m = 198 sq meters
-    const effectiveAreaPerBuilding = 198;
-    
-    // Calculate how many buildings can fit
-    const maxBuildings = Math.floor(parcelArea / effectiveAreaPerBuilding);
-    
-    // Minimum 1, maximum 8 for performance
-    const count = Math.max(1, Math.min(maxBuildings, 8));
-    
-    console.log(`📊 Parcel: ${parcelArea.toFixed(0)}m² → ${count} building(s)`);
-    return count;
-  }
-
-  /**
-   * Generate placement positions with intelligent spacing
+   * Generate placement positions for multiple buildings within a parcel
+   * Returns array of [lng, lat] coordinates
    */
   generateBuildingPositions(parcelCoords, count) {
+    if (count <= 0) return [];
+    
+    // Calculate parcel bounds
     const lngs = parcelCoords.map(c => c[0]);
     const lats = parcelCoords.map(c => c[1]);
+    
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
     const minLat = Math.min(...lats);
@@ -81,66 +86,32 @@ class Building3DService {
     
     const positions = [];
     
-    // If only one building, place at center
     if (count === 1) {
-      const centroid = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
-      console.log(`📍 Placing 1 building at center`);
-      return [centroid];
-    }
-    
-    // For multiple buildings, use smart placement
-    const minSpacing = 3 / 111000; // 3m minimum spacing in degrees
-    const buildingHalfWidth = (5 / 2) / 111000; // Half of 5m
-    const buildingHalfLength = (12 / 2) / 111000; // Half of 12m
-    const buildingRadius = Math.max(buildingHalfWidth, buildingHalfLength);
-    
-    // Try placing buildings with spacing
-    let attempts = 0;
-    const maxAttempts = count * 20; // More attempts for better placement
-    
-    while (positions.length < count && attempts < maxAttempts) {
-      attempts++;
-      
-      // Random position within parcel bounds (with margin)
-      const margin = buildingRadius * 2;
-      const lng = minLng + margin + Math.random() * (maxLng - minLng - 2 * margin);
-      const lat = minLat + margin + Math.random() * (maxLat - minLat - 2 * margin);
-      
-      // Check if building footprint is fully inside parcel
-      const corners = [
-        [lng - buildingHalfWidth, lat - buildingHalfLength],
-        [lng + buildingHalfWidth, lat - buildingHalfLength],
-        [lng + buildingHalfWidth, lat + buildingHalfLength],
-        [lng - buildingHalfWidth, lat + buildingHalfLength]
+      // Single building at centroid
+      const centroid = [
+        (minLng + maxLng) / 2,
+        (minLat + maxLat) / 2
       ];
-      
-      const allCornersInside = corners.every(corner => 
-        this.isPointInPolygon(corner, parcelCoords)
-      );
-      
-      if (!allCornersInside) continue;
-      
-      // Check spacing from existing buildings
-      const hasAdequateSpacing = positions.every(pos => {
-        const dx = lng - pos[0];
-        const dy = lat - pos[1];
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance >= (buildingRadius * 2 + minSpacing);
-      });
-      
-      if (hasAdequateSpacing) {
-        positions.push([lng, lat]);
-      }
-    }
-    
-    // If we couldn't place all buildings, that's okay
-    // At minimum, place one at center if nothing worked
-    if (positions.length === 0) {
-      const centroid = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
       positions.push(centroid);
-      console.log(`⚠️ Could only fit 1 building at center`);
     } else {
-      console.log(`📍 Placed ${positions.length} building(s) with spacing`);
+      // Grid layout for multiple buildings
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      
+      const lngStep = (maxLng - minLng) / (cols + 1);
+      const latStep = (maxLat - minLat) / (rows + 1);
+      
+      for (let row = 1; row <= rows && positions.length < count; row++) {
+        for (let col = 1; col <= cols && positions.length < count; col++) {
+          const lng = minLng + col * lngStep;
+          const lat = minLat + row * latStep;
+          
+          // Check if position is inside parcel
+          if (this.isPointInPolygon([lng, lat], parcelCoords)) {
+            positions.push([lng, lat]);
+          }
+        }
+      }
     }
     
     return positions;
@@ -173,47 +144,38 @@ class Building3DService {
     if (!map || !parcelCoords) return null;
 
     try {
-      // Load models from backend if not already loaded
-      await this.loadModels();
-      
-      if (this.models.length === 0) {
-        console.error('No building models available');
-        return null;
-      }
-
-      // Calculate parcel area
+      // Calculate parcel area (approximate using bounding box)
       const lngs = parcelCoords.map(c => c[0]);
       const lats = parcelCoords.map(c => c[1]);
-      const width = (Math.max(...lngs) - Math.min(...lngs)) * 111000;
+      const width = (Math.max(...lngs) - Math.min(...lngs)) * 111000; // degrees to meters
       const height = (Math.max(...lats) - Math.min(...lats)) * 111000;
       const parcelArea = width * height;
 
-      console.log(`🏗️ Placing buildings in ${parcelArea.toFixed(0)}m² parcel`);
+      // Select building model
+      const buildingModel = this.selectBuildingModel(parcelArea, zoningType);
       
       // Calculate how many buildings to place
-      const buildingCount = this.calculateBuildingCount(parcelArea);
+      const buildingCount = this.calculateBuildingCount(parcelArea, buildingModel);
       
-      // Generate positions with spacing
+      // Generate positions
       const positions = this.generateBuildingPositions(parcelCoords, buildingCount);
 
       // Create a custom layer for 3D models
       const layerId = `buildings-3d-${Date.now()}`;
       
-      // Add models at each position
+      // Load and add models at each position
       const modelPromises = positions.map((position, index) => {
-        const randomModel = this.getRandomBuildingModel();
-        return this.addSingleModel(map, layerId, randomModel, position, index);
+        return this.addSingleModel(map, layerId, buildingModel, position, index);
       });
 
       await Promise.all(modelPromises);
       
       this.activeLayers.push(layerId);
       
-      console.log(`✅ Rendered ${positions.length} building(s) on map`);
-      
       return {
         layerId,
         buildingCount: positions.length,
+        modelType: buildingModel.name,
       };
       
     } catch (error) {
@@ -236,17 +198,16 @@ class Building3DService {
     const sourceId = `${layerId}-source-${index}`;
     const buildingLayerId = `${layerId}-layer-${index}`;
     
-    // Create building footprint: 5m x 12m
-    const width = (5 / 2) / 111000; // 2.5m in degrees (half width)
-    const length = (12 / 2) / 111000; // 6m in degrees (half length)
+    // Create a small polygon at the position to represent the building
+    const size = 0.0001; // degrees (~10 meters)
     const [lng, lat] = position;
     
     const buildingPolygon = [
-      [lng - width, lat - length],
-      [lng + width, lat - length],
-      [lng + width, lat + length],
-      [lng - width, lat + length],
-      [lng - width, lat - length],
+      [lng - size, lat - size],
+      [lng + size, lat - size],
+      [lng + size, lat + size],
+      [lng - size, lat + size],
+      [lng - size, lat - size],
     ];
     
     if (map.getSource(sourceId)) {
@@ -274,17 +235,10 @@ class Building3DService {
       type: "fill-extrusion",
       source: sourceId,
       paint: {
-        "fill-extrusion-color": [
-          'interpolate',
-          ['linear'],
-          ['get', 'height'],
-          0, '#e2e8f0',    // Light blue-gray for short buildings
-          10, '#94a3b8',   // Medium blue-gray
-          20, '#64748b'    // Darker blue-gray for tall buildings
-        ],
+        "fill-extrusion-color": buildingModel.type === "residential" ? "#4CAF50" : "#2196F3",
         "fill-extrusion-height": buildingModel.height,
         "fill-extrusion-base": 0,
-        "fill-extrusion-opacity": 0.95,
+        "fill-extrusion-opacity": 0.85,
       },
     });
   }

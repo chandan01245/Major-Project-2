@@ -95,31 +95,6 @@ class GeoapifyService {
             const name = f.properties.name || f.properties.district || f.properties.ward || `District ${index + 1}`;
             const stats = this.generateDistrictStats(name, cityId);
             
-            // Calculate centroid for polygon geometries
-            let lat, lng;
-            if (f.properties.lat && f.properties.lon) {
-              lat = f.properties.lat;
-              lng = f.properties.lon;
-            } else if (f.geometry.type === 'Point') {
-              lng = f.geometry.coordinates[0];
-              lat = f.geometry.coordinates[1];
-            } else if (f.geometry.type === 'Polygon' && f.geometry.coordinates && f.geometry.coordinates[0]) {
-              // Calculate simple centroid of polygon (arithmetic mean)
-              const coords = f.geometry.coordinates[0];
-              lng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
-              lat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-            } else if (f.geometry.type === 'MultiPolygon' && f.geometry.coordinates && f.geometry.coordinates[0] && f.geometry.coordinates[0][0]) {
-              // Calculate simple centroid of first polygon in multipolygon
-              const coords = f.geometry.coordinates[0][0];
-              lng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
-              lat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-            }
-            
-            // Log centroid for debugging
-            if (cityId === 'mumbai' || cityId === 'new_york') {
-              console.log(`📍 ${name} centroid: [${lng}, ${lat}]`);
-            }
-            
             return {
               id: f.id || `${cityId}_district_${index}`,
               name: name,
@@ -131,8 +106,8 @@ class GeoapifyService {
               population: stats.population,
               currency: stats.currency,
               isPolygon: true,
-              lat: lat,
-              lng: lng
+              lat: f.properties.lat || (f.geometry.type === 'Point' ? f.geometry.coordinates[1] : null),
+              lng: f.properties.lon || (f.geometry.type === 'Point' ? f.geometry.coordinates[0] : null)
             };
           });
         }

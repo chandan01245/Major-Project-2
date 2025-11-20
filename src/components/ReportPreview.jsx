@@ -167,42 +167,33 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
           
           {/* Traffic Impact */}
           {traffic && (
-            <section className="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-xl border border-orange-200 shadow-sm">
-              <h3 className="text-lg font-bold text-orange-800 mb-4 flex items-center gap-2">
-                <Car className="w-5 h-5 text-orange-600" />
+            <section>
+              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <Car className="w-5 h-5 text-emerald-600" />
                 Traffic Impact Analysis
               </h3>
               <div className="grid md:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-orange-200 shadow-sm">
-                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Est. Daily Trips</p>
-                  <p className="text-3xl font-bold text-slate-800 mt-2">{traffic.dailyTrips.toLocaleString()}</p>
-                  <p className="text-xs text-slate-600 mt-2 flex items-center gap-1">
-                    <Info className="w-3 h-3" />
-                    Based on {traffic.unitCount} {traffic.unitType}
-                  </p>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <p className="text-xs text-slate-500">Est. Daily Trips</p>
+                  <p className="text-xl font-bold text-slate-800 mt-1">{traffic.dailyTrips.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500 mt-1">Based on {traffic.unitCount} {traffic.unitType}</p>
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-orange-200 shadow-sm">
-                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Peak Hour Trips</p>
-                  <p className="text-3xl font-bold text-slate-800 mt-2">{traffic.peakHourTrips.toLocaleString()}</p>
-                  <p className="text-xs text-slate-600 mt-2">AM/PM Peak Hours</p>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <p className="text-xs text-slate-500">Peak Hour Trips</p>
+                  <p className="text-xl font-bold text-slate-800 mt-1">{traffic.peakHourTrips.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500 mt-1">AM/PM Peak</p>
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-orange-200 shadow-sm">
-                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">Congestion Impact</p>
-                  <div className="flex items-center gap-2 mt-3">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                  <p className="text-xs text-slate-500 mb-1">Congestion Impact</p>
+                  <div className="flex items-center gap-2">
                     <div 
-                      className="w-4 h-4 rounded-full shadow-sm" 
+                      className="w-3 h-3 rounded-full" 
                       style={{ backgroundColor: traffic.congestion.color }}
                     />
-                    <span className="font-bold text-lg text-slate-800">{traffic.congestion.level}</span>
+                    <span className="font-bold text-slate-800">{traffic.congestion.level}</span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-2">{traffic.congestion.description}</p>
+                  <p className="text-xs text-slate-600 mt-1">{traffic.congestion.description}</p>
                 </div>
-              </div>
-              <div className="mt-4 bg-white p-4 rounded-lg border border-orange-100">
-                <p className="text-xs text-slate-600">
-                  <strong>Note:</strong> Traffic estimates based on ITE Trip Generation rates. 
-                  Actual traffic may vary based on location, public transport access, and development mix.
-                </p>
               </div>
             </section>
           )}
@@ -215,19 +206,17 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                {amenities.schools && amenities.schools.length > 0 && (
-                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 text-indigo-700 font-semibold">
-                       <GraduationCap className="w-5 h-5" /> Schools
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2 text-slate-700 font-medium">
+                       <GraduationCap className="w-4 h-4" /> Schools
                     </div>
-                    <ul className="space-y-2">
+                    <ul className="text-sm space-y-1">
                        {amenities.schools.map((s, i) => (
-                         <li key={i} className="bg-white p-2 rounded-lg">
-                           <div className="text-sm font-medium text-slate-800 truncate">{s.name}</div>
-                           <div className="flex items-center gap-2 mt-1">
-                             <span className="text-xs font-semibold text-slate-700">{s.distance} km</span>
-                             <span className="text-xs text-slate-400">•</span>
-                             <span className="text-xs text-emerald-600">🚶 {s.walking_time} min</span>
-                             <span className="text-xs text-blue-600">🚗 {s.driving_time} min</span>
+                         <li key={i} className="flex justify-between text-slate-600">
+                           <span>{s.name}</span>
+                           <div className="flex gap-2">
+                             <span className="text-xs bg-slate-200 px-1 rounded">{s.distance}km</span>
+                             {s.time && <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">{s.time}</span>}
                            </div>
                          </li>
                        ))}
@@ -235,59 +224,35 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                  </div>
                )}
                {amenities.hospitals && amenities.hospitals.length > 0 && (
-                 <div className="bg-gradient-to-br from-red-50 to-pink-50 p-4 rounded-xl border border-red-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 text-red-700 font-semibold">
-                       <Activity className="w-5 h-5" /> Hospitals
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2 text-slate-700 font-medium">
+                       <Activity className="w-4 h-4" /> Hospitals
                     </div>
-                    <ul className="space-y-2">
+                    <ul className="text-sm space-y-1">
                        {amenities.hospitals.map((s, i) => (
-                         <li key={i} className="bg-white p-2 rounded-lg">
-                           <div className="text-sm font-medium text-slate-800 truncate">{s.name}</div>
-                           <div className="flex items-center gap-2 mt-1">
-                             <span className="text-xs font-semibold text-slate-700">{s.distance} km</span>
-                             <span className="text-xs text-slate-400">•</span>
-                             <span className="text-xs text-emerald-600">🚶 {s.walking_time} min</span>
-                             <span className="text-xs text-blue-600">🚗 {s.driving_time} min</span>
+                         <li key={i} className="flex justify-between text-slate-600">
+                           <span>{s.name}</span>
+                           <div className="flex gap-2">
+                             <span className="text-xs bg-slate-200 px-1 rounded">{s.distance}km</span>
+                             {s.time && <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">{s.time}</span>}
                            </div>
                          </li>
                        ))}
                     </ul>
                  </div>
                )}
-               {amenities.transport && amenities.transport.length > 0 && (
-                 <div className="bg-gradient-to-br from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 text-purple-700 font-semibold">
-                       <Bus className="w-5 h-5" /> Transport
+               {amenities.metro && amenities.metro.length > 0 && (
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2 text-slate-700 font-medium">
+                       <Bus className="w-4 h-4" /> Metro
                     </div>
-                    <ul className="space-y-2">
-                       {amenities.transport.map((s, i) => (
-                         <li key={i} className="bg-white p-2 rounded-lg">
-                           <div className="text-sm font-medium text-slate-800 truncate">{s.name}</div>
-                           <div className="flex items-center gap-2 mt-1">
-                             <span className="text-xs font-semibold text-slate-700">{s.distance} km</span>
-                             <span className="text-xs text-slate-400">•</span>
-                             <span className="text-xs text-emerald-600">🚶 {s.walking_time} min</span>
-                             <span className="text-xs text-blue-600">🚗 {s.driving_time} min</span>
-                           </div>
-                         </li>
-                       ))}
-                    </ul>
-                 </div>
-               )}
-               {amenities.parks && amenities.parks.length > 0 && (
-                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 text-green-700 font-semibold">
-                       <Zap className="w-5 h-5" /> Parks
-                    </div>
-                    <ul className="space-y-2">
-                       {amenities.parks.map((s, i) => (
-                         <li key={i} className="bg-white p-2 rounded-lg">
-                           <div className="text-sm font-medium text-slate-800 truncate">{s.name}</div>
-                           <div className="flex items-center gap-2 mt-1">
-                             <span className="text-xs font-semibold text-slate-700">{s.distance} km</span>
-                             <span className="text-xs text-slate-400">•</span>
-                             <span className="text-xs text-emerald-600">🚶 {s.walking_time} min</span>
-                             <span className="text-xs text-blue-600">🚗 {s.driving_time} min</span>
+                    <ul className="text-sm space-y-1">
+                       {amenities.metro.map((s, i) => (
+                         <li key={i} className="flex justify-between text-slate-600">
+                           <span>{s.name}</span>
+                           <div className="flex gap-2">
+                             <span className="text-xs bg-slate-200 px-1 rounded">{s.distance}km</span>
+                             {s.time && <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">{s.time}</span>}
                            </div>
                          </li>
                        ))}

@@ -37,46 +37,6 @@ class ZoningMLModel:
         # Zoning categories
         self.zone_types = ['residential', 'commercial', 'industrial', 'mixed']
         
-        # City-specific pricing data (price per sqm in local currency)
-        self.city_pricing = {
-            'bangalore': {
-                'residential': {'min': 6500, 'max': 12000, 'avg': 9000, 'currency': '₹'},
-                'commercial': {'min': 8000, 'max': 15000, 'avg': 11500, 'currency': '₹'},
-                'industrial': {'min': 4000, 'max': 7000, 'avg': 5500, 'currency': '₹'},
-                'mixed': {'min': 7000, 'max': 13000, 'avg': 10000, 'currency': '₹'}
-            },
-            'mumbai': {
-                'residential': {'min': 15000, 'max': 35000, 'avg': 25000, 'currency': '₹'},
-                'commercial': {'min': 20000, 'max': 50000, 'avg': 35000, 'currency': '₹'},
-                'industrial': {'min': 8000, 'max': 15000, 'avg': 11500, 'currency': '₹'},
-                'mixed': {'min': 18000, 'max': 40000, 'avg': 29000, 'currency': '₹'}
-            },
-            'delhi': {
-                'residential': {'min': 8000, 'max': 18000, 'avg': 13000, 'currency': '₹'},
-                'commercial': {'min': 10000, 'max': 25000, 'avg': 17500, 'currency': '₹'},
-                'industrial': {'min': 5000, 'max': 10000, 'avg': 7500, 'currency': '₹'},
-                'mixed': {'min': 9000, 'max': 20000, 'avg': 14500, 'currency': '₹'}
-            },
-            'hyderabad': {
-                'residential': {'min': 5000, 'max': 10000, 'avg': 7500, 'currency': '₹'},
-                'commercial': {'min': 7000, 'max': 13000, 'avg': 10000, 'currency': '₹'},
-                'industrial': {'min': 3500, 'max': 6000, 'avg': 4750, 'currency': '₹'},
-                'mixed': {'min': 6000, 'max': 11000, 'avg': 8500, 'currency': '₹'}
-            },
-            'new_york': {
-                'residential': {'min': 3000, 'max': 8000, 'avg': 5500, 'currency': '$'},
-                'commercial': {'min': 4000, 'max': 12000, 'avg': 8000, 'currency': '$'},
-                'industrial': {'min': 1500, 'max': 3500, 'avg': 2500, 'currency': '$'},
-                'mixed': {'min': 3500, 'max': 10000, 'avg': 6750, 'currency': '$'}
-            },
-            'singapore': {
-                'residential': {'min': 8000, 'max': 20000, 'avg': 14000, 'currency': 'S$'},
-                'commercial': {'min': 10000, 'max': 30000, 'avg': 20000, 'currency': 'S$'},
-                'industrial': {'min': 4000, 'max': 10000, 'avg': 7000, 'currency': 'S$'},
-                'mixed': {'min': 9000, 'max': 25000, 'avg': 17000, 'currency': 'S$'}
-            }
-        }
-        
     def add_training_data(self, document_data, city='bangalore'):
         """Add extracted document data to training set"""
         # Add city information
@@ -225,7 +185,7 @@ class ZoningMLModel:
             'model_version': self.model_version
         }
     
-    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None, city='bangalore'):
+    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None):
         """Generate full ML-powered report"""
         # Extract features
         features = self.extract_features(polygon, nearby_areas)
@@ -238,19 +198,20 @@ class ZoningMLModel:
         centroid = self._get_centroid(polygon)
         perimeter = self._calculate_perimeter(polygon)
         
-        # Get zone type for pricing
-        zone_type = predictions['attributes'].get('zoneType', 'residential')
-        
-        # Get city-specific pricing
-        city_price_data = self._get_city_pricing(city, zone_type, features.get('avg_nearby_value'))
-        price_range = city_price_data
+        # Price analysis
+        avg_price = features.get('avg_nearby_value', 8500)
+        price_range = {
+            'min': int(avg_price * 0.85),
+            'max': int(avg_price * 1.15),
+            'average': int(avg_price)
+        }
         
         # Amenities (use passed real data or fallback to simulation)
         if not amenities:
             amenities = self._find_amenities(centroid)
         
-        # Buildability score (city-aware)
-        buildability = self._calculate_buildability(predictions['attributes'], area, amenities, city)
+        # Buildability score
+        buildability = self._calculate_buildability(predictions['attributes'], area, amenities)
         
         # Development scenarios
         scenarios = self._generate_scenarios(area, predictions['attributes'])
@@ -262,11 +223,13 @@ class ZoningMLModel:
             amenities
         )
         
-        # Market trend (city-specific)
-        market_trend = self._get_market_trend(city, zone_type)
-        
-        # Calculate traffic impact
-        traffic = self._calculate_traffic_impact(area, predictions['attributes'])
+        # Market trend
+        market_trend = {
+            'trend': 'rising',
+            'growthRate': f"{8.5 + np.random.random() * 3:.1f}%",
+            'outlook': 'positive',
+            'period': 'year-over-year'
+        }
         
         report = {
             'generatedAt': datetime.now().isoformat(),
@@ -293,8 +256,7 @@ class ZoningMLModel:
             'recommendations': recommendations,
             'aqiForecast': aqi_forecast,
             'lightningRisk': lightning_risk,
-            'roadCondition': road_condition,
-            'traffic': traffic
+            'roadCondition': road_condition
         }
         
         return report
@@ -412,67 +374,6 @@ class ZoningMLModel:
         
         return attributes_map.get(zone_type, attributes_map['residential'])
     
-    def _get_city_pricing(self, city, zone_type, nearby_avg_value=None):
-        """Get city and zone-specific pricing"""
-        city_lower = city.lower()
-        
-        # Default to bangalore if city not found
-        if city_lower not in self.city_pricing:
-            city_lower = 'bangalore'
-        
-        zone_pricing = self.city_pricing[city_lower].get(zone_type, self.city_pricing[city_lower]['residential'])
-        
-        # If we have nearby value data, use it to adjust pricing within city ranges
-        if nearby_avg_value and nearby_avg_value > 0:
-            # Use nearby values but constrain to city ranges
-            adjusted_min = max(zone_pricing['min'], int(nearby_avg_value * 0.85))
-            adjusted_max = min(zone_pricing['max'], int(nearby_avg_value * 1.15))
-            adjusted_avg = int((adjusted_min + adjusted_max) / 2)
-        else:
-            adjusted_min = zone_pricing['min']
-            adjusted_max = zone_pricing['max']
-            adjusted_avg = zone_pricing['avg']
-        
-        return {
-            'min': adjusted_min,
-            'max': adjusted_max,
-            'average': adjusted_avg,
-            'currency': zone_pricing['currency']
-        }
-    
-    def _get_market_trend(self, city, zone_type):
-        """Get market trend based on city and zone type"""
-        city_lower = city.lower()
-        
-        # City-specific growth rates (approximate annual growth %)
-        city_growth = {
-            'bangalore': {'residential': 8.5, 'commercial': 10.2, 'industrial': 6.5, 'mixed': 9.0},
-            'mumbai': {'residential': 5.8, 'commercial': 7.5, 'industrial': 4.2, 'mixed': 6.5},
-            'delhi': {'residential': 7.2, 'commercial': 8.8, 'industrial': 5.5, 'mixed': 7.8},
-            'hyderabad': {'residential': 9.5, 'commercial': 11.2, 'industrial': 7.8, 'mixed': 10.0},
-            'new_york': {'residential': 3.5, 'commercial': 4.8, 'industrial': 2.5, 'mixed': 4.0},
-            'singapore': {'residential': 4.2, 'commercial': 5.5, 'industrial': 3.2, 'mixed': 4.8}
-        }
-        
-        # Default to bangalore if city not found
-        if city_lower not in city_growth:
-            city_lower = 'bangalore'
-        
-        growth_rate = city_growth[city_lower].get(zone_type, 7.0)
-        
-        # Add some randomness for realistic variation
-        growth_rate += np.random.uniform(-1.0, 1.5)
-        
-        trend_status = 'rising' if growth_rate > 5 else 'stable' if growth_rate > 2 else 'slow'
-        outlook = 'positive' if growth_rate > 6 else 'stable' if growth_rate > 3 else 'cautious'
-        
-        return {
-            'trend': trend_status,
-            'growthRate': f"{growth_rate:.1f}%",
-            'outlook': outlook,
-            'description': f"Market showing {trend_status} trend with {outlook} outlook"
-        }
-    
     def _calculate_area(self, polygon):
         """Calculate polygon area in square meters"""
         if len(polygon) < 3:
@@ -532,99 +433,47 @@ class ZoningMLModel:
             ]
         }
     
-    def _calculate_buildability(self, attributes, area, amenities, city='bangalore'):
-        """Calculate buildability score with city-specific adjustments"""
+    def _calculate_buildability(self, attributes, area, amenities):
+        """Calculate buildability score"""
         score = 0
         factors = []
         
-        # Zoning compliance (25 points)
         if attributes['far']:
             score += 25
             factors.append({'name': 'Zoning Compliance', 'score': 25, 'status': 'excellent'})
         
-        # Site area evaluation (20 points) - city-specific thresholds
-        city_area_thresholds = {
-            'bangalore': 500, 'mumbai': 400, 'delhi': 450,
-            'hyderabad': 600, 'new_york': 300, 'singapore': 350
-        }
-        threshold = city_area_thresholds.get(city.lower(), 500)
-        
-        if area > threshold * 2:
+        if area > 500:
             score += 20
-            factors.append({'name': 'Site Area', 'score': 20, 'status': 'excellent'})
-        elif area > threshold:
+            factors.append({'name': 'Site Area', 'score': 20, 'status': 'good'})
+        else:
+            score += 10
+            factors.append({'name': 'Site Area', 'score': 10, 'status': 'fair'})
+        
+        avg_school_dist = np.mean([s['distance'] for s in amenities['schools']])
+        if avg_school_dist < 2:
+            score += 20
+            factors.append({'name': 'School Proximity', 'score': 20, 'status': 'excellent'})
+        else:
+            score += 10
+            factors.append({'name': 'School Proximity', 'score': 10, 'status': 'good'})
+        
+        min_metro = min([m['distance'] for m in amenities['metro']])
+        if min_metro < 2:
+            score += 20
+            factors.append({'name': 'Metro Access', 'score': 20, 'status': 'excellent'})
+        else:
+            score += 10
+            factors.append({'name': 'Metro Access', 'score': 10, 'status': 'good'})
+        
+        avg_hospital_dist = np.mean([h['distance'] for h in amenities['hospitals']])
+        if avg_hospital_dist < 3:
             score += 15
-            factors.append({'name': 'Site Area', 'score': 15, 'status': 'good'})
+            factors.append({'name': 'Healthcare Access', 'score': 15, 'status': 'good'})
         else:
             score += 8
-            factors.append({'name': 'Site Area', 'score': 8, 'status': 'fair'})
+            factors.append({'name': 'Healthcare Access', 'score': 8, 'status': 'fair'})
         
-        # School proximity (20 points)
-        if amenities.get('schools') and len(amenities['schools']) > 0:
-            school_distances = [s.get('distance', 10) for s in amenities['schools'] if s.get('distance') is not None]
-            if school_distances:
-                avg_school_dist = np.mean(school_distances)
-                if avg_school_dist < 1.5:
-                    score += 20
-                    factors.append({'name': 'School Proximity', 'score': 20, 'status': 'excellent'})
-                elif avg_school_dist < 3:
-                    score += 15
-                    factors.append({'name': 'School Proximity', 'score': 15, 'status': 'good'})
-                else:
-                    score += 8
-                    factors.append({'name': 'School Proximity', 'score': 8, 'status': 'fair'})
-            else:
-                score += 5
-                factors.append({'name': 'School Proximity', 'score': 5, 'status': 'limited'})
-        else:
-            score += 5
-            factors.append({'name': 'School Proximity', 'score': 5, 'status': 'limited'})
-        
-        # Transport access (20 points)
-        transport_list = amenities.get('transport', amenities.get('metro', []))
-        if transport_list and len(transport_list) > 0:
-            transport_distances = [t.get('distance', 10) for t in transport_list if t.get('distance') is not None]
-            if transport_distances:
-                min_transport = min(transport_distances)
-                if min_transport < 1:
-                    score += 20
-                    factors.append({'name': 'Transport Access', 'score': 20, 'status': 'excellent'})
-                elif min_transport < 2:
-                    score += 15
-                    factors.append({'name': 'Transport Access', 'score': 15, 'status': 'good'})
-                else:
-                    score += 8
-                    factors.append({'name': 'Transport Access', 'score': 8, 'status': 'fair'})
-            else:
-                score += 5
-                factors.append({'name': 'Transport Access', 'score': 5, 'status': 'limited'})
-        else:
-            score += 5
-            factors.append({'name': 'Transport Access', 'score': 5, 'status': 'limited'})
-        
-        # Healthcare proximity (15 points)
-        if amenities.get('hospitals') and len(amenities['hospitals']) > 0:
-            hospital_distances = [h.get('distance', 10) for h in amenities['hospitals'] if h.get('distance') is not None]
-            if hospital_distances:
-                avg_hospital_dist = np.mean(hospital_distances)
-                if avg_hospital_dist < 2:
-                    score += 15
-                    factors.append({'name': 'Healthcare Access', 'score': 15, 'status': 'excellent'})
-                elif avg_hospital_dist < 4:
-                    score += 10
-                    factors.append({'name': 'Healthcare Access', 'score': 10, 'status': 'good'})
-                else:
-                    score += 5
-                    factors.append({'name': 'Healthcare Access', 'score': 5, 'status': 'fair'})
-            else:
-                score += 3
-                factors.append({'name': 'Healthcare Access', 'score': 3, 'status': 'limited'})
-        else:
-            score += 3
-            factors.append({'name': 'Healthcare Access', 'score': 3, 'status': 'limited'})
-        
-        # Determine grade
-        grade = 'A+' if score >= 90 else 'A' if score >= 80 else 'B+' if score >= 70 else 'B' if score >= 60 else 'C+' if score >= 50 else 'C'
+        grade = 'A+' if score > 85 else 'A' if score > 75 else 'B+' if score > 65 else 'B' if score > 55 else 'C'
         
         return {
             'score': score,
@@ -708,52 +557,6 @@ class ZoningMLModel:
         })
         
         return recommendations
-    
-    def _calculate_traffic_impact(self, area, attributes):
-        """Calculate traffic impact based on ITE Trip Generation rates"""
-        zone_type = attributes.get('zoneType', 'residential').lower()
-        
-        # ITE Trip Generation rates (trips per unit or per 100 sqm)
-        trip_rates = {
-            'residential': {'daily': 8, 'peak': 0.8},  # per dwelling unit
-            'commercial': {'daily': 12, 'peak': 1.2},  # per 100 sqm
-            'industrial': {'daily': 4, 'peak': 0.5},   # per 100 sqm
-            'mixed-use': {'daily': 10, 'peak': 1.0}    # per 100 sqm
-        }
-        
-        rate = trip_rates.get(zone_type, trip_rates['residential'])
-        
-        # Calculate units or area units
-        if zone_type == 'residential':
-            # Assume 100 sqm per dwelling unit
-            unit_count = int(area / 100)
-            unit_type = 'Dwelling Units'
-        else:
-            # Per 100 sqm for non-residential
-            unit_count = int(area / 100)
-            unit_type = '100m² Units'
-        
-        # Calculate trips
-        daily_trips = int(unit_count * rate['daily'])
-        peak_hour_trips = int(unit_count * rate['peak'])
-        
-        # Determine congestion level
-        if peak_hour_trips < 50:
-            congestion = {'level': 'Low', 'description': 'Minimal traffic impact'}
-        elif peak_hour_trips < 100:
-            congestion = {'level': 'Moderate', 'description': 'Manageable with mitigation'}
-        elif peak_hour_trips < 200:
-            congestion = {'level': 'High', 'description': 'Requires traffic management'}
-        else:
-            congestion = {'level': 'Very High', 'description': 'Significant mitigation needed'}
-        
-        return {
-            'dailyTrips': daily_trips,
-            'peakHourTrips': peak_hour_trips,
-            'unitCount': unit_count,
-            'unitType': unit_type,
-            'congestion': congestion
-        }
     
     def save_model(self, filepath):
         """Save trained model to disk"""

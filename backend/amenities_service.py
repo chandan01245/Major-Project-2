@@ -6,7 +6,6 @@ class AmenitiesFinder:
     def __init__(self):
         self.api_key = os.getenv('REACT_APP_MAPTILER_KEY') 
         self.base_url = "https://api.maptiler.com/geocoding"
-        print(f"🔑 AmenitiesFinder initialized with API key: {'✅ Yes' if self.api_key else '❌ No'}")
 
     def find_amenities(self, lat, lng, radius_km=50.0):
         """
@@ -14,10 +13,8 @@ class AmenitiesFinder:
         Returns the nearest 3 amenities for each category, regardless of distance (within a large radius).
         """
         if not self.api_key:
-            print("⚠️ MapTiler API Key not found! Returning mock data.")
+            print("⚠️ MapTiler API Key not found!")
             return self._get_mock_amenities()
-        
-        print(f"🔍 Searching amenities near {lat}, {lng}")
 
         amenities = {
             'schools': [],
@@ -54,16 +51,9 @@ class AmenitiesFinder:
                             place_lng, place_lat = feature['center']
                             dist = self._calculate_distance(lat, lng, place_lat, place_lng)
                             
-                            # Calculate travel time (assuming average speeds)
-                            # Walking: 5 km/h, Driving: 40 km/h (urban)
-                            walking_time = round((dist / 5) * 60, 1)  # minutes
-                            driving_time = round((dist / 40) * 60, 1)  # minutes
-                            
                             item = {
                                 'name': feature['place_name'],
                                 'distance': round(dist, 2),
-                                'walking_time': walking_time,
-                                'driving_time': driving_time,
                                 'lat': place_lat,
                                 'lng': place_lng,
                                 'type': category
@@ -143,24 +133,8 @@ class AmenitiesFinder:
     def _get_mock_amenities(self):
         """Fallback mock data"""
         return {
-            'schools': [
-                {'name': 'Demo School', 'distance': 1.2, 'walking_time': 14.4, 'driving_time': 1.8},
-                {'name': 'City High', 'distance': 3.5, 'walking_time': 42.0, 'driving_time': 5.3},
-                {'name': 'Tech Institute', 'distance': 12.0, 'walking_time': 144.0, 'driving_time': 18.0}
-            ],
-            'hospitals': [
-                {'name': 'City Hospital', 'distance': 2.5, 'walking_time': 30.0, 'driving_time': 3.8},
-                {'name': 'General Clinic', 'distance': 4.1, 'walking_time': 49.2, 'driving_time': 6.2},
-                {'name': 'Trauma Center', 'distance': 15.2, 'walking_time': 182.4, 'driving_time': 22.8}
-            ],
-            'transport': [
-                {'name': 'Central Station', 'distance': 3.0, 'walking_time': 36.0, 'driving_time': 4.5},
-                {'name': 'Bus Terminal', 'distance': 0.8, 'walking_time': 9.6, 'driving_time': 1.2},
-                {'name': 'Metro Stop', 'distance': 1.5, 'walking_time': 18.0, 'driving_time': 2.3}
-            ],
-            'parks': [
-                {'name': 'Central Park', 'distance': 0.5, 'walking_time': 6.0, 'driving_time': 0.8},
-                {'name': 'Botanical Garden', 'distance': 5.2, 'walking_time': 62.4, 'driving_time': 7.8},
-                {'name': 'Community Park', 'distance': 2.1, 'walking_time': 25.2, 'driving_time': 3.2}
-            ]
+            'schools': [{'name': 'Demo School', 'distance': 1.2}, {'name': 'City High', 'distance': 3.5}, {'name': 'Tech Institute', 'distance': 12.0}],
+            'hospitals': [{'name': 'City Hospital', 'distance': 2.5}, {'name': 'General Clinic', 'distance': 4.1}, {'name': 'Trauma Center', 'distance': 15.2}],
+            'transport': [{'name': 'Central Station', 'distance': 3.0}, {'name': 'Bus Terminal', 'distance': 0.8}, {'name': 'Metro Stop', 'distance': 1.5}],
+            'parks': [{'name': 'Central Park', 'distance': 0.5}, {'name': 'Botanical Garden', 'distance': 5.2}, {'name': 'Community Park', 'distance': 2.1}]
         }

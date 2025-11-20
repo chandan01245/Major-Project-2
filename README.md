@@ -241,106 +241,84 @@ Visit **[http://localhost:3000](http://localhost:3000)** 🎉
 
 ---
 
-## 📁 Project Structure (Production-Ready Architecture)
+## 📁 Project Structure
 
 ```
 urbanform-pro/
-├── 📂 public/                          # Static assets (served by CDN in prod)
-│   ├── index.html                     # HTML template
-│   ├── favicon.ico                    # Site icon
-│   ├── manifest.json                  # PWA manifest
-│   ├── robots.txt                     # SEO crawler rules
-│   └── images/                        # Static images
+├── 📂 public/                    # Static assets
+│   ├── index.html
+│   ├── favicon.ico
+│   └── manifest.json
 │
-├── 📂 src/                            # Frontend source (React 18)
-│   ├── 📂 components/                # Reusable React components
-│   │   ├── ReportPreview.jsx        # PDF report modal with download
-│   │   ├── Loading.jsx              # Loading indicators
-│   │   └── common/                  # Shared UI components
+├── 📂 src/                       # Frontend source
+│   ├── 📂 components/           # React components
+│   │   ├── ReportPreview.jsx   # PDF report modal
+│   │   └── ...
 │   │
-│   ├── 📂 services/                  # Business logic layer
-│   │   ├── mapService.js            # MapTiler SDK operations
-│   │   ├── mlServiceBackend.js      # ML API client (Backend integration)
-│   │   ├── pdfService.js            # jsPDF report generation
-│   │   ├── building3DService.js     # 3D building placement & rendering
-│   │   ├── trafficService.js        # ITE trip generation calculations
-│   │   └── geoapifyService.js       # Geocoding & place search
+│   ├── 📂 services/             # Business logic
+│   │   ├── mapService.js       # Map operations
+│   │   ├── mlServiceBackend.js # ML API integration
+│   │   ├── pdfService.js       # Report generation
+│   │   ├── procedural3DService.js  # 3D model generation
+│   │   ├── trafficService.js   # Traffic analysis
+│   │   └── geoapifyService.js  # Geocoding
 │   │
-│   ├── 📂 config/                    # Configuration files
-│   │   ├── cities.js                # 10+ city definitions with zones
-│   │   └── map.config.js            # Map initialization config
+│   ├── 📂 config/               # Configuration
+│   │   └── cities.js           # City definitions
 │   │
-│   ├── 📂 constants/                 # Application constants
-│   │   └── zoningTypes.js           # Zoning categories & regulations
+│   ├── 📂 constants/            # Constants
+│   │   └── zoningTypes.js      # Zoning categories
 │   │
-│   ├── 📂 data/                      # Static GeoJSON data
-│   │   └── sample_buildings.geojson # Building footprints
+│   ├── 📂 data/                 # Static data
+│   │   └── sample_buildings.geojson
 │   │
-│   ├── 📂 hooks/                     # Custom React hooks
-│   │   ├── useMap.js                # Map lifecycle management
-│   │   └── useDebounce.js           # Search debouncing
+│   ├── 📂 hooks/                # Custom React hooks
+│   │   └── useMap.js
 │   │
-│   ├── 📂 utils/                     # Utility functions
-│   │   ├── calculations.js          # FAR, FSI, area calculations
-│   │   ├── formatters.js            # Number & date formatting
-│   │   └── validators.js            # Input validation helpers
+│   ├── 📂 utils/                # Utility functions
+│   │   ├── calculations.js     # FAR, area calculations
+│   │   ├── formatters.js       # Data formatting
+│   │   └── validators.js       # Input validation
 │   │
-│   ├── App.jsx                       # Main application component
-│   ├── index.js                      # React entry point
-│   └── index.css                     # Global styles (Tailwind)
+│   ├── App.jsx                  # Main application
+│   ├── index.js                 # Entry point
+│   └── index.css                # Global styles
 │
-├── 📂 backend/                        # Python Flask backend
-│   ├── 📂 data/                      # Data storage
-│   │   ├── uploaded_docs/           # User-uploaded PDFs (gitignored)
-│   │   ├── sample_buildings/        # 3D building models (.obj, .glb)
-│   │   └── training_data/           # ML training datasets
+├── 📂 backend/                   # Python backend
+│   ├── 📂 api/                  # API routes
+│   │   ├── __init__.py
+│   │   ├── documents.py        # Document endpoints
+│   │   ├── zoning.py          # Zoning analysis
+│   │   └── reports.py         # Report generation
 │   │
-│   ├── 📂 models/                    # ML models (gitignored)
-│   │   ├── zone_classifier.pkl      # Scikit-learn classifier
-│   │   └── regulation_extractor/    # NLP model files
+│   ├── 📂 services/             # Backend services
+│   │   ├── ml_service.py      # ML models
+│   │   ├── pdf_parser.py      # Document parsing
+│   │   └── zone_classifier.py # Zone classification
 │   │
-│   ├── 📂 uploads/                   # Temporary upload directory
-│   ├── 📂 zoning-documents/          # Zoning regulation PDFs
+│   ├── 📂 models/               # Data models
+│   │   ├── document.py
+│   │   ├── zone.py
+│   │   └── regulation.py
 │   │
-│   ├── app.py                        # Flask application & API routes
-│   ├── document_processor.py         # PDF parsing with PyPDF2
-│   ├── zoning_ml_model.py           # ML classification logic
-│   ├── amenities_service.py         # Overpass API amenities finder
-│   ├── aqi_model.py                 # Air quality predictions
-│   ├── requirements.txt             # Python dependencies
-│   └── README.md                    # Backend documentation
+│   ├── 📂 data/                 # Backend data
+│   │   └── uploaded_docs/      # Uploaded documents
+│   │
+│   ├── app.py                   # Flask application
+│   ├── config.py               # Backend config
+│   └── requirements.txt        # Python dependencies
 │
-├── 📂 build/                          # Production build (gitignored)
-│   └── static/                       # Optimized JS/CSS bundles
+├── 📂 build/                     # Production build (generated)
+├── 📂 node_modules/             # npm packages (generated)
+├── 📂 venv/                     # Python virtual env (generated)
 │
-├── 📂 node_modules/                   # npm dependencies (gitignored)
-├── 📂 venv/                          # Python virtual env (gitignored)
-│
-├── 📂 .github/                        # GitHub Actions CI/CD
-│   └── workflows/
-│       ├── deploy.yml               # Production deployment
-│       └── test.yml                 # Automated testing
-│
-├── 📂 docs/                           # Documentation
-│   ├── API.md                       # API documentation
-│   ├── ARCHITECTURE.md              # System architecture
-│   └── DEPLOYMENT.md                # Deployment guide
-│
-├── .env                              # Environment variables (gitignored)
-├── .env.example                      # Environment template
-├── .gitignore                        # Git ignore rules (comprehensive)
-├── .eslintrc.json                    # ESLint configuration
-├── package.json                      # npm configuration & scripts
-├── package-lock.json                 # Locked dependencies
-├── tailwind.config.js                # Tailwind CSS configuration
-├── postcss.config.js                 # PostCSS configuration
-├── vercel.json                       # Vercel deployment config
-├── netlify.toml                      # Netlify deployment config
-├── Dockerfile                        # Docker containerization
-├── docker-compose.yml                # Local Docker setup
-├── CHANGES_SUMMARY.md                # Change log
-├── QUICK_FIXES.md                    # Quick fix documentation
-└── README.md                         # This file (main documentation)
+├── .env                         # Environment variables (create from .env.example)
+├── .env.example                 # Environment template
+├── .gitignore                   # Git ignore rules
+├── package.json                 # npm configuration
+├── tailwind.config.js          # Tailwind CSS config
+├── postcss.config.js           # PostCSS config
+└── README.md                    # This file
 ```
 
 ### **Key Architecture Decisions**
@@ -787,6 +765,7 @@ pytest --cov             # With coverage
 ---
 
 ## 📦 Deployment
+## 📦 Deployment
 
 ### **Quick Deploy (10 Minutes)**
 
@@ -883,21 +862,17 @@ NETLIFY_DISABLE_SECRETS_SCANNER=true
 4. Start Command: `gunicorn -w 4 -b 0.0.0.0:$PORT app:app`
 5. Add environment variable: `MAPTILER_KEY=your_key`
 
-#### Option 3: Docker Deployment (Full Stack)
+### **Docker Deployment**
 
-**Create `Dockerfile`:**
+Create `Dockerfile`:
 ```dockerfile
-# Multi-stage build for optimized image
-
-# Stage 1: Build frontend
-FROM node:18-alpine AS frontend-build
+FROM node:16-alpine as frontend
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production=false
+RUN npm ci --production
 COPY . .
 RUN npm run build
 
-# Stage 2: Python backend with built frontend
 FROM python:3.9-slim
 WORKDIR /app
 
@@ -1163,7 +1138,7 @@ jobs:
 
 ---
 
-## 🐛 Troubleshooting
+## 🔒 Environment Variables Reference
 
 ### **Common Issues**
 
