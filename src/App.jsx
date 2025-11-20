@@ -48,6 +48,7 @@ const IndianUrbanForm = () => {
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [showDocumentPanel, setShowDocumentPanel] = useState(false);
   const [mapStyle, setMapStyle] = useState("streets");
+  const [isChangingStyle, setIsChangingStyle] = useState(false);
   const [currentDrawingArea, setCurrentDrawingArea] = useState(0);
   const [drawingPoints, setDrawingPoints] = useState([]);
   const [cityZones, setCityZones] = useState([]);
@@ -57,9 +58,10 @@ const IndianUrbanForm = () => {
   const [isLoading3D, setIsLoading3D] = useState(false);
   const [show3DView, setShow3DView] = useState(false);
   const [isLoadingZones, setIsLoadingZones] = useState(false);
+  const [generated3DAssets, setGenerated3DAssets] = useState(null);
+  const [buildingModels, setBuildingModels] = useState([]);
+  const [placedBuildings, setPlacedBuildings] = useState([]);
 
-
-  
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -259,16 +261,7 @@ const IndianUrbanForm = () => {
     if (mapRef.current || !mapContainerRef.current) return;
 
     try {
-      // Fetch MapTiler API key from backend
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
-      const keyResponse = await fetch(`${backendUrl}/api/config/maptiler-key`);
-      const keyData = await keyResponse.json();
-      
-      if (!keyData.key) {
-        throw new Error('Failed to get MapTiler API key');
-      }
-      
-      maptilersdk.config.apiKey = keyData.key;
+      maptilersdk.config.apiKey = process.env.REACT_APP_MAPTILER_KEY;
 
       const map = new maptilersdk.Map({
         container: mapContainerRef.current,
@@ -278,8 +271,10 @@ const IndianUrbanForm = () => {
         pitch: 0,
         bearing: 0,
         attributionControl: false,
-        terrain: true, // Enable 3D terrain
-        terrainControl: false, // We'll control this programmatically
+        terrain: false, // Disable terrain to avoid shader errors
+        terrainControl: false,
+        fadeDuration: 0, // Disable fade animation to prevent sprite loading issues
+        crossSourceCollisions: false, // Prevent collision detection issues
       });
 
       mapRef.current = map;
@@ -398,7 +393,7 @@ const IndianUrbanForm = () => {
           map.addControl(drawRef.current, "bottom-right");
           drawControlAddedRef.current = true;
         }
-        
+
         // Enable 3D buildings from OSM data
         add3DBuildingsLayer();
 
@@ -442,6 +437,12 @@ const IndianUrbanForm = () => {
   const updateMapVisualization = () => {
     if (!mapRef.current) return;
 
+    // Safety check for draw control
+    if (!drawRef.current) {
+      console.warn("Draw control not initialized yet");
+      return;
+    }
+
     // Clear existing markers
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
@@ -454,10 +455,14 @@ const IndianUrbanForm = () => {
     if (mapRef.current.getSource("zones")) mapRef.current.removeSource("zones");
 
     // Remove procedural 3D layers if they exist
-    ['procedural-buildings-extrude', 'procedural-trees-extrude', 'procedural-trees-extrude-trunk'].forEach(layer => {
+    [
+      "procedural-buildings-extrude",
+      "procedural-trees-extrude",
+      "procedural-trees-extrude-trunk",
+    ].forEach((layer) => {
       if (mapRef.current.getLayer(layer)) mapRef.current.removeLayer(layer);
     });
-    ['procedural-buildings', 'procedural-trees'].forEach(source => {
+    ["procedural-buildings", "procedural-trees"].forEach((source) => {
       if (mapRef.current.getSource(source)) mapRef.current.removeSource(source);
     });
 
@@ -596,87 +601,100 @@ const IndianUrbanForm = () => {
       }
 
       // Render Procedural 3D Assets (Buildings & Trees) - INDEPENDENT of generatedReport
-      console.log('3D Check:', { 
-        hasAssets: !!generated3DAssets, 
+      console.log("3D Check:", {
+        hasAssets: !!generated3DAssets,
         hasPolygon: !!drawnPolygon,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-      
+
       if (generated3DAssets && drawnPolygon) {
-        console.log('✅ Rendering 3D Assets:', generated3DAssets);
-        console.log('Building count:', generated3DAssets.buildings?.features?.length);
-        console.log('Tree count:', generated3DAssets.trees?.features?.length);
-        
+        console.log("✅ Rendering 3D Assets:", generated3DAssets);
+        console.log(
+          "Building count:",
+          generated3DAssets.buildings?.features?.length
+        );
+        console.log("Tree count:", generated3DAssets.trees?.features?.length);
+
         // Buildings
-        const buildingsSourceId = 'procedural-buildings';
-        const buildingsLayerId = 'procedural-buildings-extrude';
+        const buildingsSourceId = "procedural-buildings";
+        const buildingsLayerId = "procedural-buildings-extrude";
 
         if (mapRef.current.getSource(buildingsSourceId)) {
-           if (mapRef.current.getLayer(buildingsLayerId)) mapRef.current.removeLayer(buildingsLayerId);
-           mapRef.current.removeSource(buildingsSourceId);
+          if (mapRef.current.getLayer(buildingsLayerId))
+            mapRef.current.removeLayer(buildingsLayerId);
+          mapRef.current.removeSource(buildingsSourceId);
         }
 
         mapRef.current.addSource(buildingsSourceId, {
-          type: 'geojson',
-          data: generated3DAssets.buildings
+          type: "geojson",
+          data: generated3DAssets.buildings,
         });
 
         mapRef.current.addLayer({
           id: buildingsLayerId,
-          type: 'fill-extrusion',
+          type: "fill-extrusion",
           source: buildingsSourceId,
           paint: {
-            'fill-extrusion-color': ['coalesce', ['get', 'color'], '#93c5fd'],
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-opacity': 0.85,
-            'fill-extrusion-base': 0
-          }
+            "fill-extrusion-color": ["coalesce", ["get", "color"], "#93c5fd"],
+            "fill-extrusion-height": ["get", "height"],
+            "fill-extrusion-opacity": 0.85,
+            "fill-extrusion-base": 0,
+          },
         });
-        
-        console.log(`🏢 Rendered ${generated3DAssets.buildings.features.length} buildings on map`);
+
+        console.log(
+          `🏢 Rendered ${generated3DAssets.buildings.features.length} buildings on map`
+        );
 
         // Trees
-        const treesSourceId = 'procedural-trees';
-        const treesLayerId = 'procedural-trees-extrude';
+        const treesSourceId = "procedural-trees";
+        const treesLayerId = "procedural-trees-extrude";
 
         if (mapRef.current.getSource(treesSourceId)) {
-           if (mapRef.current.getLayer(treesLayerId)) mapRef.current.removeLayer(treesLayerId);
-           if (mapRef.current.getLayer(treesLayerId + '-trunk')) mapRef.current.removeLayer(treesLayerId + '-trunk');
-           mapRef.current.removeSource(treesSourceId);
+          if (mapRef.current.getLayer(treesLayerId))
+            mapRef.current.removeLayer(treesLayerId);
+          if (mapRef.current.getLayer(treesLayerId + "-trunk"))
+            mapRef.current.removeLayer(treesLayerId + "-trunk");
+          mapRef.current.removeSource(treesSourceId);
         }
 
         mapRef.current.addSource(treesSourceId, {
-          type: 'geojson',
-          data: generated3DAssets.trees
+          type: "geojson",
+          data: generated3DAssets.trees,
         });
 
         mapRef.current.addLayer({
-          id: treesLayerId + '-trunk',
-          type: 'fill-extrusion',
+          id: treesLayerId + "-trunk",
+          type: "fill-extrusion",
           source: treesSourceId,
           paint: {
-            'fill-extrusion-color': '#8B4513', // SaddleBrown
-            'fill-extrusion-height': ['get', 'trunkHeight'],
-            'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.9
-          }
+            "fill-extrusion-color": "#8B4513", // SaddleBrown
+            "fill-extrusion-height": ["get", "trunkHeight"],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.9,
+          },
         });
 
         mapRef.current.addLayer({
           id: treesLayerId,
-          type: 'fill-extrusion',
+          type: "fill-extrusion",
           source: treesSourceId,
           paint: {
-            'fill-extrusion-color': '#22c55e', // Green-500
-            'fill-extrusion-height': ['get', 'canopyHeight'],
-            'fill-extrusion-base': ['get', 'trunkHeight'],
-            'fill-extrusion-opacity': 0.75
-          }
+            "fill-extrusion-color": "#22c55e", // Green-500
+            "fill-extrusion-height": ["get", "canopyHeight"],
+            "fill-extrusion-base": ["get", "trunkHeight"],
+            "fill-extrusion-opacity": 0.75,
+          },
         });
-        
-        console.log(`🌳 Rendered ${generated3DAssets.trees.features.length} trees on map`);
+
+        console.log(
+          `🌳 Rendered ${generated3DAssets.trees.features.length} trees on map`
+        );
       } else {
-        console.log('❌ Not rendering 3D assets:', { hasAssets: !!generated3DAssets, hasPolygon: !!drawnPolygon });
+        console.log("❌ Not rendering 3D assets:", {
+          hasAssets: !!generated3DAssets,
+          hasPolygon: !!drawnPolygon,
+        });
       }
 
       // Add click interaction for polygons
@@ -693,7 +711,7 @@ const IndianUrbanForm = () => {
       });
       mapRef.current.on("mouseleave", "zones-fill", () => {
         mapRef.current.getCanvas().style.cursor = "";
-      });
+      })
     }
   };
 
@@ -758,16 +776,25 @@ const IndianUrbanForm = () => {
   };
 
   const calculatePolygonArea = (coordinates) => {
-    let area = 0;
-    const n = coordinates.length;
-    for (let i = 0; i < n - 1; i++) {
-      const [x1, y1] = coordinates[i];
-      const [x2, y2] = coordinates[i + 1];
-      area += x1 * y2 - x2 * y1;
+    // Use turf.js for accurate geodesic area calculation
+    try {
+      const polygon = turf.polygon([coordinates]);
+      const areaInSquareMeters = turf.area(polygon);
+      return Math.round(areaInSquareMeters);
+    } catch (error) {
+      console.error("Error calculating area:", error);
+      // Fallback to simple calculation
+      let area = 0;
+      const n = coordinates.length;
+      for (let i = 0; i < n - 1; i++) {
+        const [x1, y1] = coordinates[i];
+        const [x2, y2] = coordinates[i + 1];
+        area += x1 * y2 - x2 * y1;
+      }
+      area = Math.abs(area / 2);
+      const metersPerDegree = 111320;
+      return Math.round(area * metersPerDegree * metersPerDegree);
     }
-    area = Math.abs(area / 2);
-    const metersPerDegree = 111320;
-    return Math.round(area * metersPerDegree * metersPerDegree);
   };
 
   const handleDrawCreate = async (e) => {
@@ -780,8 +807,11 @@ const IndianUrbanForm = () => {
       ]);
       setDrawnPolygon(coordinates);
       setIsDrawingMode(false);
-      setCurrentDrawingArea(0);
-      setDrawingPoints([]);
+
+      // Calculate and set the area properly
+      const area = calculatePolygonArea(coordinates);
+      setCurrentDrawingArea(area);
+      setDrawingPoints(coordinates.length - 1);
 
       // Reset cursor
       if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
@@ -794,61 +824,112 @@ const IndianUrbanForm = () => {
         );
       }
 
+      // The building3DService handles loading models and placement internally
+      // Just call it to place buildings in the parcel
+
       // Auto-tilt map for 3D view first
       if (mapRef.current) {
-        mapRef.current.easeTo({
-          pitch: 60,
-          bearing: -17.6,
-          duration: 2000,
+        // Zoom to parcel first
+        const bounds = coordinates.reduce(
+          (acc, coord) => {
+            return [
+              [Math.min(acc[0][0], coord[0]), Math.min(acc[0][1], coord[1])],
+              [Math.max(acc[1][0], coord[0]), Math.max(acc[1][1], coord[1])],
+            ];
+          },
+          [
+            [Infinity, Infinity],
+            [-Infinity, -Infinity],
+          ]
+        );
+
+        mapRef.current.fitBounds(bounds, {
+          padding: { top: 100, bottom: 100, left: 100, right: 100 },
+          duration: 1000,
         });
 
-        // Wait for animation and 3D tiles to load
+        // Then tilt for 3D view
         setTimeout(() => {
-          setShow3DView(true);
-          setIsLoading3D(false);
-        }, 2500);
+          mapRef.current.easeTo({
+            pitch: 60,
+            bearing: -17.6,
+            duration: 2000,
+          });
+
+          // Wait for animation and 3D tiles to load
+          setTimeout(() => {
+            setShow3DView(true);
+            setIsLoading3D(false);
+          }, 2500);
+        }, 1200);
       } else {
         setShow3DView(true);
         setIsLoading3D(false);
       }
-      
+
       // Generate Procedural 3D Assets with zoning parameters
       // Determine zoning type from nearby areas
-      const centroid = coordinates.reduce((acc, coord) => {
-        acc[0] += coord[0];
-        acc[1] += coord[1];
-        return acc;
-      }, [0, 0]).map(v => v / coordinates.length);
+      const centroid = coordinates
+        .reduce(
+          (acc, coord) => {
+            acc[0] += coord[0];
+            acc[1] += coord[1];
+            return acc;
+          },
+          [0, 0]
+        )
+        .map((v) => v / coordinates.length);
 
       const nearestZone = cityZones
-        .map(zone => ({
+        .map((zone) => ({
           ...zone,
           distance: Math.sqrt(
             Math.pow(zone.lng - centroid[0], 2) +
-            Math.pow(zone.lat - centroid[1], 2)
-          )
+              Math.pow(zone.lat - centroid[1], 2)
+          ),
         }))
         .sort((a, b) => a.distance - b.distance)[0];
 
       // Define zoning parameters based on zone type
       const zoningParams = {
-        residential: { maxHeight: 35, minHeight: 12, groundCoverage: 0.4, color: '#93c5fd' },
-        commercial: { maxHeight: 55, minHeight: 20, groundCoverage: 0.6, color: '#fbbf24' },
-        industrial: { maxHeight: 25, minHeight: 10, groundCoverage: 0.7, color: '#f97316' },
-        mixed: { maxHeight: 45, minHeight: 15, groundCoverage: 0.5, color: '#a78bfa' }
+        residential: {
+          maxHeight: 35,
+          minHeight: 12,
+          groundCoverage: 0.4,
+          color: "#93c5fd",
+        },
+        commercial: {
+          maxHeight: 55,
+          minHeight: 20,
+          groundCoverage: 0.6,
+          color: "#fbbf24",
+        },
+        industrial: {
+          maxHeight: 25,
+          minHeight: 10,
+          groundCoverage: 0.7,
+          color: "#f97316",
+        },
+        mixed: {
+          maxHeight: 45,
+          minHeight: 15,
+          groundCoverage: 0.5,
+          color: "#a78bfa",
+        },
       };
 
-      const zoneType = nearestZone?.type || 'residential';
+      const zoneType = nearestZone?.type || "residential";
       const params = zoningParams[zoneType] || zoningParams.residential;
 
-     
+      console.log(`🏙️ Using ${zoneType} zoning parameters:`, params);
+      console.log(`📍 Parcel coordinates:`, coordinates);
+
       await building3DService.addBuildingsToParcel(
         mapRef.current,
         coordinates,
         zoneType,
         params
       );
-
     }
   };
 
@@ -860,6 +941,7 @@ const IndianUrbanForm = () => {
     setShow3DView(false);
     building3DService.removeAllBuildings(mapRef.current);
     setIsLoading3D(false);
+    setGenerated3DAssets(null);
 
     // Reset map view
     if (mapRef.current) {
@@ -1029,7 +1111,7 @@ const IndianUrbanForm = () => {
 
   const add3DBuildingsLayer = () => {
     if (!mapRef.current) return;
-    
+
     try {
       // Remove existing 3D buildings layer if present
       if (mapRef.current.getLayer("3d-buildings")) {
@@ -1039,47 +1121,50 @@ const IndianUrbanForm = () => {
       const layers = mapRef.current.getStyle().layers;
       let firstSymbolId;
       for (const layer of layers) {
-        if (layer.type === 'symbol') {
+        if (layer.type === "symbol") {
           firstSymbolId = layer.id;
           break;
         }
       }
 
-      mapRef.current.addLayer({
-        id: "3d-buildings",
-        source: "openmaptiles",
-        "source-layer": "building",
-        type: "fill-extrusion",
-        minzoom: 14,
-        paint: {
-          "fill-extrusion-color": [
-            "case",
-            ["has", "colour"],
-            ["get", "colour"],
-            "#aaa"
-          ],
-          "fill-extrusion-height": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15,
-            0,
-            15.05,
-            ["coalesce", ["get", "render_height"], 0]
-          ],
-          "fill-extrusion-base": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15,
-            0,
-            15.05,
-            ["coalesce", ["get", "render_min_height"], 0]
-          ],
-          "fill-extrusion-opacity": 0.8
-        }
-      }, firstSymbolId);
-      
+      mapRef.current.addLayer(
+        {
+          id: "3d-buildings",
+          source: "openmaptiles",
+          "source-layer": "building",
+          type: "fill-extrusion",
+          minzoom: 14,
+          paint: {
+            "fill-extrusion-color": [
+              "case",
+              ["has", "colour"],
+              ["get", "colour"],
+              "#aaa",
+            ],
+            "fill-extrusion-height": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              15,
+              0,
+              15.05,
+              ["coalesce", ["get", "render_height"], 0],
+            ],
+            "fill-extrusion-base": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              15,
+              0,
+              15.05,
+              ["coalesce", ["get", "render_min_height"], 0],
+            ],
+            "fill-extrusion-opacity": 0.8,
+          },
+        },
+        firstSymbolId
+      );
+
       console.log("✅ 3D buildings layer added");
     } catch (e) {
       console.warn("Could not add 3D buildings layer:", e);
@@ -1088,45 +1173,150 @@ const IndianUrbanForm = () => {
 
   const changeMapStyle = (style) => {
     if (!mapRef.current) return;
+
+    // Prevent style changes while already changing or map is still loading
+    if (isChangingStyle) {
+      console.warn("Style change already in progress, please wait...");
+      return;
+    }
+
+    if (!mapRef.current.isStyleLoaded()) {
+      console.warn("Map style still loading, please wait...");
+      return;
+    }
+
+    setIsChangingStyle(true);
+    console.log("🗺️ Changing map style to:", style);
+
     try {
       const styles = {
         streets: maptilersdk.MapStyle.STREETS,
         satellite: maptilersdk.MapStyle.SATELLITE,
         outdoor: maptilersdk.MapStyle.OUTDOOR,
+        hybrid: maptilersdk.MapStyle.HYBRID,
+        dataviz: maptilersdk.MapStyle.DATAVIZ,
       };
 
+      // Save current map state
+      const currentCenter = mapRef.current.getCenter();
+      const currentZoom = mapRef.current.getZoom();
+      const currentPitch = mapRef.current.getPitch();
+      const currentBearing = mapRef.current.getBearing();
+
+      // Remove existing controls
       if (drawRef.current && drawControlAddedRef.current) {
         try {
           mapRef.current.removeControl(drawRef.current);
           drawControlAddedRef.current = false;
         } catch (e) {
-          console.warn(e);
+          console.warn("Error removing draw control:", e);
         }
       }
 
-      mapRef.current.setStyle(styles[style] || maptilersdk.MapStyle.STREETS);
+      const targetStyle = styles[style] || maptilersdk.MapStyle.STREETS;
+
+      // Add error listener before changing style
+      const onStyleError = (error) => {
+        console.error("❌ Style load error:", error);
+        setIsChangingStyle(false);
+        // Try to recover to streets view
+        if (style !== "streets") {
+          setTimeout(() => {
+            try {
+              mapRef.current.setStyle(maptilersdk.MapStyle.STREETS, {
+                diff: false,
+              });
+              setMapStyle("streets");
+            } catch (e) {
+              console.error("Recovery failed:", e);
+            }
+          }, 500);
+        }
+      };
+
+      mapRef.current.once("error", onStyleError);
+
+      // Set the new style with options to prevent shader/sprite errors
+      mapRef.current.setStyle(targetStyle, {
+        diff: false, // Use diff:false to avoid partial updates
+        fadeDuration: 0, // Disable fade to prevent sprite loading issues
+        crossSourceCollisions: false,
+      });
       setMapStyle(style);
 
-      mapRef.current.once("styledata", () => {
-        setTimeout(() => {
-          // Re-add 3D buildings after style change
-          add3DBuildingsLayer();
-          
-          if (selectedCity) updateMapVisualization();
-          else renderCityMarkers();
+      // Wait for the style to fully load before resuming
+      const onStyleLoad = () => {
+        // Remove error listener since we loaded successfully
+        mapRef.current.off("error", onStyleError);
+        console.log("✅ Style loaded successfully");
 
-          if (drawRef.current && !drawControlAddedRef.current) {
+        // Wait a bit longer to ensure all resources are ready
+        setTimeout(() => {
+          try {
+            // Restore map state
+            mapRef.current.jumpTo({
+              center: currentCenter,
+              zoom: currentZoom,
+              pitch: currentPitch,
+              bearing: currentBearing,
+            });
+
+            // Re-add 3D buildings after style change (with error handling)
             try {
-              mapRef.current.addControl(drawRef.current, "bottom-right");
-              drawControlAddedRef.current = true;
+              add3DBuildingsLayer();
             } catch (e) {
-              console.warn(e);
+              console.warn("Could not add 3D buildings layer:", e);
             }
+
+            if (selectedCity) {
+              try {
+                updateMapVisualization();
+              } catch (e) {
+                console.warn("Error updating visualization:", e);
+              }
+            } else {
+              renderCityMarkers();
+            }
+
+            // Re-add draw controls
+            if (drawRef.current && !drawControlAddedRef.current) {
+              try {
+                mapRef.current.addControl(drawRef.current, "bottom-right");
+                drawControlAddedRef.current = true;
+              } catch (e) {
+                console.warn("Error adding draw control:", e);
+              }
+            }
+
+            // Re-enable style changes
+            setIsChangingStyle(false);
+          } catch (e) {
+            console.error("Error in style reload:", e);
+            setIsChangingStyle(false);
           }
-        }, 500);
-      });
+        }, 800);
+      };
+
+      // Listen for successful style load
+      mapRef.current.once("style.load", onStyleLoad);
     } catch (error) {
       console.error("Error changing map style:", error);
+      setIsChangingStyle(false);
+
+      // Reset to streets on error
+      if (mapRef.current && style !== "streets") {
+        try {
+          console.log("🔄 Attempting recovery to streets style...");
+          mapRef.current.setStyle(maptilersdk.MapStyle.STREETS, {
+            diff: false,
+          });
+          setMapStyle("streets");
+          setTimeout(() => setIsChangingStyle(false), 1000);
+        } catch (e) {
+          console.error("Fatal map style error:", e);
+          setIsChangingStyle(false);
+        }
+      }
     }
   };
 
@@ -1354,7 +1544,6 @@ const IndianUrbanForm = () => {
                       <button
                         key={idx}
                         onClick={() => {
-                          flyToArea(area);
                           handleAreaClick(area);
                         }}
                         className="w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 transition-all text-left flex items-center gap-3"
@@ -1463,28 +1652,74 @@ const IndianUrbanForm = () => {
 
         {/* Map Controls - Moved to Top Center */}
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-10">
+          {isChangingStyle && (
+            <div className="bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              <span className="text-sm text-slate-700">
+                Changing map style...
+              </span>
+            </div>
+          )}
           <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1">
             <button
               onClick={() => changeMapStyle("streets")}
+              disabled={isChangingStyle}
               className={`p-2 rounded-lg transition-colors ${
                 mapStyle === "streets"
                   ? "bg-emerald-100 text-emerald-700"
                   : "hover:bg-slate-100 text-slate-700"
-              }`}
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
               title="Streets View"
             >
               <MapPin className="w-5 h-5" />
             </button>
             <button
+              onClick={() => changeMapStyle("outdoor")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "outdoor"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Outdoor View"
+            >
+              <Building2 className="w-5 h-5" />
+            </button>
+            <button
               onClick={() => changeMapStyle("satellite")}
+              disabled={isChangingStyle}
               className={`p-2 rounded-lg transition-colors ${
                 mapStyle === "satellite"
                   ? "bg-emerald-100 text-emerald-700"
                   : "hover:bg-slate-100 text-slate-700"
-              }`}
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
               title="Satellite View"
             >
+              <Globe className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => changeMapStyle("hybrid")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "hybrid"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Hybrid View"
+            >
               <Layers className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => changeMapStyle("dataviz")}
+              disabled={isChangingStyle}
+              className={`p-2 rounded-lg transition-colors ${
+                mapStyle === "dataviz"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "hover:bg-slate-100 text-slate-700"
+              } ${isChangingStyle ? "opacity-50 cursor-not-allowed" : ""}`}
+              title="Dataviz View"
+            >
+              <Building className="w-5 h-5" />
             </button>
           </div>
 
@@ -1724,10 +1959,6 @@ const IndianUrbanForm = () => {
           </div>
         )}
 
-        {/* Attribution Explanation */}
-        <div className="absolute bottom-1 right-1 text-[10px] text-slate-400 bg-white/80 px-1 rounded pointer-events-none">
-          MapTiler © OpenStreetMap contributors
-        </div>
       </div>
     </div>
   );

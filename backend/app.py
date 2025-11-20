@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
-import requests
 from datetime import datetime
 from zoning_ml_model import ZoningMLModel
 from document_processor import DocumentProcessor
@@ -251,106 +250,6 @@ def delete_document(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# API Key endpoints
-@app.route('/api/config/maptiler-key', methods=['GET'])
-def get_maptiler_key():
-    """Get MapTiler API key for map initialization"""
-    # In production, consider implementing rate limiting and authentication
-    api_key = os.getenv('MAPTILER_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key not configured'}), 500
-    
-    return jsonify({'key': api_key})
-
-# API Proxy Endpoints to hide API keys from client
-@app.route('/api/proxy/maptiler/dataset/<dataset_id>', methods=['GET'])
-def proxy_maptiler_dataset(dataset_id):
-    """Proxy MapTiler dataset API"""
-    api_key = os.getenv('MAPTILER_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key not configured'}), 500
-    
-    url = f"https://api.maptiler.com/data/{dataset_id}/features.json?key={api_key}"
-    
-    try:
-        response = requests.get(url)
-        return jsonify(response.json()), response.status_code
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/proxy/geoapify/search', methods=['GET'])
-def proxy_geoapify_search():
-    """Proxy Geoapify geocoding search"""
-    text = request.args.get('text')
-    limit = request.args.get('limit', 1)
-    
-    api_key = os.getenv('GEOAPIFY_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key not configured'}), 500
-    
-    url = f"https://api.geoapify.com/v1/geocode/search?text={text}&limit={limit}&apiKey={api_key}"
-    
-    try:
-        response = requests.get(url)
-        return jsonify(response.json()), response.status_code
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/proxy/geoapify/boundary', methods=['GET'])
-def proxy_geoapify_boundary():
-    """Proxy Geoapify boundary lookup"""
-    place_id = request.args.get('id')
-    geometry = request.args.get('geometry', 'geometry_1000')
-    
-    api_key = os.getenv('GEOAPIFY_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key not configured'}), 500
-    
-    url = f"https://api.geoapify.com/v1/boundaries/place?id={place_id}&geometry={geometry}&apiKey={api_key}"
-    
-    try:
-        response = requests.get(url)
-        return jsonify(response.json()), response.status_code
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/proxy/geoapify/places', methods=['GET'])
-def proxy_geoapify_places():
-    """Proxy Geoapify places (amenities) search"""
-    categories = request.args.get('categories')
-    filter_param = request.args.get('filter')
-    limit = request.args.get('limit', 20)
-    
-    api_key = os.getenv('GEOAPIFY_KEY')
-    if not api_key:
-        return jsonify({'error': 'API key not configured'}), 500
-    
-    url = f"https://api.geoapify.com/v2/places?categories={categories}&filter={filter_param}&limit={limit}&apiKey={api_key}"
-    
-    try:
-        response = requests.get(url)
-        return jsonify(response.json()), response.status_code
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Serve React frontend in production (when static folder exists)
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_frontend(path):
-    """Serve React build in production"""
-    if path and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    elif os.path.exists(os.path.join(app.static_folder, 'index.html')):
-        return send_from_directory(app.static_folder, 'index.html')
-    else:
-        # Development mode - API only
-        return jsonify({
-            'message': 'UrbanForm Pro API',
-            'version': '2.0.0',
-            'status': 'running',
-            'note': 'Frontend not built. Run in development mode or build React app.'
-        })
-
 if __name__ == '__main__':
     print("🚀 Starting ML-Powered Zoning Regulation Backend...")
     print("📊 Loading pre-trained models...")
@@ -362,13 +261,6 @@ if __name__ == '__main__':
     else:
         print("⚠️  No pre-trained model found. Upload documents to train.")
 
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_ENV', 'development') != 'production'
+    print(f"🌐 Server running on http://0.0.0.0:5000")
     
-    print(f"🌐 Server running on http://0.0.0.0:{port}")
-    if os.path.exists('static/index.html'):
-        print("✅ Serving React frontend from /static")
-    else:
-        print("ℹ️  API-only mode (frontend not built)")
-    
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=5000)

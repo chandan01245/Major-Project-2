@@ -4,7 +4,7 @@ import math
 
 class AmenitiesFinder:
     def __init__(self):
-        self.api_key = os.getenv('REACT_APP_MAPTILER_KEY') 
+        self.api_key = os.getenv('REACT_APP_MAPTILER_KEY') or os.getenv('MAPTILER_KEY')
         self.base_url = "https://api.maptiler.com/geocoding"
 
     def find_amenities(self, lat, lng, radius_km=50.0):
