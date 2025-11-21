@@ -68,6 +68,7 @@ const IndianUrbanForm = () => {
   const drawRef = useRef(null);
   const fileInputRef = useRef(null);
   const drawControlAddedRef = useRef(false);
+  const zoneClickHandlerRef = useRef(false);
 
   const zoningRegulations = {
     residential: {
@@ -199,10 +200,10 @@ const IndianUrbanForm = () => {
 
   // Update map markers/polygons when zones change or toggle changes
   useEffect(() => {
-    if (mapLoaded && selectedCity) {
+    if (mapLoaded && selectedCity && cityZones.length > 0) {
       updateMapVisualization();
     }
-  }, [cityZones, showZoneOverlays, mapLoaded, selectedCity, generatedReport]);
+  }, [cityZones, showZoneOverlays, mapLoaded, selectedCity]);
 
   const fetchExistingDocuments = async (cityId) => {
     try {
@@ -434,7 +435,7 @@ const IndianUrbanForm = () => {
   };
 
   const updateMapVisualization = () => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !mapRef.current.isStyleLoaded()) return;
 
     // Safety check for draw control
     if (!drawRef.current) {
@@ -446,66 +447,76 @@ const IndianUrbanForm = () => {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // Remove existing polygon layers if any
-    if (mapRef.current.getLayer("zones-fill"))
-      mapRef.current.removeLayer("zones-fill");
-    if (mapRef.current.getLayer("zones-outline"))
-      mapRef.current.removeLayer("zones-outline");
-    if (mapRef.current.getSource("zones")) mapRef.current.removeSource("zones");
+    // Prepare polygon features
+    const features = showZoneOverlays ? cityZones
+      .filter((zone) => zone.isPolygon)
+      .map((zone) => ({
+        type: "Feature",
+        geometry: zone.geometry,
+        properties: {
+          color: zone.color,
+          name: zone.name,
+          type: zone.type,
+        },
+      })) : [];
+
+    // Update or create zones source and layers
+    if (showZoneOverlays && features.length > 0) {
+      const zonesSource = mapRef.current.getSource("zones");
+      
+      if (zonesSource) {
+        // Update existing source instead of removing and re-adding
+        zonesSource.setData({
+          type: "FeatureCollection",
+          features: features,
+        });
+      } else {
+        // Create new source and layers
+        mapRef.current.addSource("zones", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: features,
+          },
+        });
+
+        mapRef.current.addLayer({
+          id: "zones-fill",
+          type: "fill",
+          source: "zones",
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": 0.4,
+          },
+        });
+
+        mapRef.current.addLayer({
+          id: "zones-outline",
+          type: "line",
+          source: "zones",
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 2,
+          },
+        });
+      }
+    } else {
+      // Remove layers if showZoneOverlays is false
+      if (mapRef.current.getLayer("zones-fill"))
+        mapRef.current.removeLayer("zones-fill");
+      if (mapRef.current.getLayer("zones-outline"))
+        mapRef.current.removeLayer("zones-outline");
+      if (mapRef.current.getSource("zones"))
+        mapRef.current.removeSource("zones");
+    }
 
     // Remove procedural 3D layers if they exist
-    [
-      "procedural-buildings-extrude",
-      "procedural-trees-extrude",
-      "procedural-trees-extrude-trunk",
-    ].forEach((layer) => {
+    ["procedural-buildings-extrude", "procedural-trees-extrude", "procedural-trees-extrude-trunk"].forEach((layer) => {
       if (mapRef.current.getLayer(layer)) mapRef.current.removeLayer(layer);
     });
     ["procedural-buildings", "procedural-trees"].forEach((source) => {
       if (mapRef.current.getSource(source)) mapRef.current.removeSource(source);
     });
-
-    if (showZoneOverlays) {
-      // Render Polygons
-      const features = cityZones
-        .filter((zone) => zone.isPolygon)
-        .map((zone) => ({
-          type: "Feature",
-          geometry: zone.geometry,
-          properties: {
-            color: zone.color,
-            name: zone.name,
-            type: zone.type,
-          },
-        }));
-
-      mapRef.current.addSource("zones", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: features,
-        },
-      });
-
-      mapRef.current.addLayer({
-        id: "zones-fill",
-        type: "fill",
-        source: "zones",
-        paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": 0.4,
-        },
-      });
-
-      mapRef.current.addLayer({
-        id: "zones-outline",
-        type: "line",
-        source: "zones",
-        paint: {
-          "line-color": ["get", "color"],
-          "line-width": 2,
-        },
-      });
 
       // Add 3D Extrusion for Drawn Polygon if available
       if (drawnPolygon && generatedReport) {

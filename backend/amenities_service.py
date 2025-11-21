@@ -51,9 +51,15 @@ class AmenitiesFinder:
                             place_lng, place_lat = feature['center']
                             dist = self._calculate_distance(lat, lng, place_lat, place_lng)
                             
+                            # Calculate estimated travel time (walking speed ~5 km/h, driving ~30 km/h in city)
+                            walking_time = round((dist / 5) * 60)  # minutes
+                            driving_time = round((dist / 30) * 60)  # minutes
+                            
                             item = {
                                 'name': feature['place_name'],
                                 'distance': round(dist, 2),
+                                'walkingTime': walking_time,
+                                'drivingTime': driving_time,
                                 'lat': place_lat,
                                 'lng': place_lng,
                                 'type': category
@@ -133,8 +139,24 @@ class AmenitiesFinder:
     def _get_mock_amenities(self):
         """Fallback mock data"""
         return {
-            'schools': [{'name': 'Demo School', 'distance': 1.2}, {'name': 'City High', 'distance': 3.5}, {'name': 'Tech Institute', 'distance': 12.0}],
-            'hospitals': [{'name': 'City Hospital', 'distance': 2.5}, {'name': 'General Clinic', 'distance': 4.1}, {'name': 'Trauma Center', 'distance': 15.2}],
-            'transport': [{'name': 'Central Station', 'distance': 3.0}, {'name': 'Bus Terminal', 'distance': 0.8}, {'name': 'Metro Stop', 'distance': 1.5}],
-            'parks': [{'name': 'Central Park', 'distance': 0.5}, {'name': 'Botanical Garden', 'distance': 5.2}, {'name': 'Community Park', 'distance': 2.1}]
+            'schools': [
+                {'name': 'Demo School', 'distance': 1.2, 'walkingTime': 14, 'drivingTime': 2},
+                {'name': 'City High', 'distance': 3.5, 'walkingTime': 42, 'drivingTime': 7},
+                {'name': 'Tech Institute', 'distance': 12.0, 'walkingTime': 144, 'drivingTime': 24}
+            ],
+            'hospitals': [
+                {'name': 'City Hospital', 'distance': 2.5, 'walkingTime': 30, 'drivingTime': 5},
+                {'name': 'General Clinic', 'distance': 4.1, 'walkingTime': 49, 'drivingTime': 8},
+                {'name': 'Trauma Center', 'distance': 15.2, 'walkingTime': 182, 'drivingTime': 30}
+            ],
+            'transport': [
+                {'name': 'Central Station', 'distance': 3.0, 'walkingTime': 36, 'drivingTime': 6},
+                {'name': 'Bus Terminal', 'distance': 0.8, 'walkingTime': 10, 'drivingTime': 2},
+                {'name': 'Metro Stop', 'distance': 1.5, 'walkingTime': 18, 'drivingTime': 3}
+            ],
+            'parks': [
+                {'name': 'Central Park', 'distance': 0.5, 'walkingTime': 6, 'drivingTime': 1},
+                {'name': 'Botanical Garden', 'distance': 5.2, 'walkingTime': 62, 'drivingTime': 10},
+                {'name': 'Community Park', 'distance': 2.1, 'walkingTime': 25, 'drivingTime': 4}
+            ]
         }

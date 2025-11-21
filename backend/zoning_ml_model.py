@@ -231,6 +231,9 @@ class ZoningMLModel:
             'period': 'year-over-year'
         }
         
+        # Convert area from sq meters to sq feet for price calculation
+        area_sqft = area * 10.764
+        
         report = {
             'generatedAt': datetime.now().isoformat(),
             'parcelInfo': {
@@ -242,9 +245,9 @@ class ZoningMLModel:
             'pricing': {
                 'pricePerSqft': price_range,
                 'estimatedValue': {
-                    'min': int(area * price_range['min']),
-                    'max': int(area * price_range['max']),
-                    'average': int(area * price_range['average'])
+                    'min': int(area_sqft * price_range['min']),
+                    'max': int(area_sqft * price_range['max']),
+                    'average': int(area_sqft * price_range['average'])
                 },
                 'marketTrend': market_trend
             },

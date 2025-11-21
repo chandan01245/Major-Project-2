@@ -62,9 +62,45 @@ class MLService {
   }
 
   // Generate comprehensive ML-powered report
-  async generateReport(polygon, attributes, nearbyAreas) {
-    await this.delay(1200);
+  async generateReport(polygon, attributes, nearbyAreas, cityId = 'bangalore') {
+    try {
+      // Call backend API for report generation
+      const response = await fetch('http://localhost:5000/api/generate-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          polygon,
+          nearby_areas: nearbyAreas,
+          city: cityId
+        })
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.code === 'NO_ZONING_DOCS') {
+          console.warn('No zoning documents found, using fallback data');
+          return this.generateFallbackReport(polygon, attributes, nearbyAreas);
+        }
+        throw new Error(errorData.error || 'Failed to generate report');
+      }
+
+      const data = await response.json();
+      if (data.success && data.report) {
+        return data.report;
+      } else {
+        throw new Error('Invalid response from backend');
+      }
+    } catch (error) {
+      console.error('Error calling backend API:', error);
+      console.log('Falling back to client-side generation');
+      return this.generateFallbackReport(polygon, attributes, nearbyAreas);
+    }
+  }
+
+  // Fallback report generation when backend is unavailable
+  generateFallbackReport(polygon, attributes, nearbyAreas) {
     const area = this.calculatePolygonArea(polygon);
     const centroid = this.getPolygonCentroid(polygon);
     
@@ -76,8 +112,25 @@ class MLService {
       average: avgPrice
     };
 
-    // Find nearby amenities (simulated)
-    const amenities = await this.findNearbyAmenities(centroid);
+    // Mock amenities
+    const amenities = {
+      schools: [
+        { name: 'Delhi Public School', distance: 1.2, rating: 4.5, walkingTime: 14, drivingTime: 2 },
+        { name: 'National Public School', distance: 2.3, rating: 4.3, walkingTime: 28, drivingTime: 5 }
+      ],
+      hospitals: [
+        { name: 'Manipal Hospital', distance: 1.8, rating: 4.4, walkingTime: 22, drivingTime: 4 },
+        { name: 'Apollo Hospital', distance: 3.2, rating: 4.7, walkingTime: 38, drivingTime: 6 }
+      ],
+      transport: [
+        { name: 'Indiranagar Metro', distance: 1.5, line: 'Purple Line', walkingTime: 18, drivingTime: 3 },
+        { name: 'Trinity Station', distance: 2.8, line: 'Green Line', walkingTime: 34, drivingTime: 6 }
+      ],
+      parks: [
+        { name: 'Central Park', distance: 0.8, walkingTime: 10, drivingTime: 2 },
+        { name: 'Cubbon Park', distance: 2.5, walkingTime: 30, drivingTime: 5 }
+      ]
+    };
     
     // Calculate buildability score
     const buildability = this.calculateBuildability(attributes, area, amenities);
@@ -85,6 +138,9 @@ class MLService {
     // Generate development scenarios
     const scenarios = this.generateDevelopmentScenarios(area, attributes);
 
+    // Convert area from sq meters to sq feet for price calculation
+    const areaSqft = area * 10.764;
+    
     return {
       generatedAt: new Date().toISOString(),
       parcelInfo: {
@@ -96,9 +152,9 @@ class MLService {
       pricing: {
         pricePerSqft: priceRange,
         estimatedValue: {
-          min: Math.round(area * priceRange.min),
-          max: Math.round(area * priceRange.max),
-          average: Math.round(area * priceRange.average)
+          min: Math.round(areaSqft * priceRange.min),
+          max: Math.round(areaSqft * priceRange.max),
+          average: Math.round(areaSqft * priceRange.average)
         },
         marketTrend: this.getMarketTrend(nearbyAreas)
       },
