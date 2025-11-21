@@ -187,6 +187,9 @@ def generate_report():
         # Get Road Condition
         road_condition = amenities_finder.get_road_condition(centroid_lat, centroid_lng)
         
+        # Get area from frontend (already calculated with turf.js)
+        area_sqm = data.get('area', None)
+        
         # Generate full report using ML predictions and real data
         report = ml_model.generate_comprehensive_report(
             polygon, 
@@ -194,7 +197,8 @@ def generate_report():
             amenities=amenities,
             aqi_forecast=aqi_forecast,
             lightning_risk=lightning_risk,
-            road_condition=road_condition
+            road_condition=road_condition,
+            area=area_sqm
         )
         
         return jsonify({

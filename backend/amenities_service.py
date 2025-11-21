@@ -13,7 +13,7 @@ class AmenitiesFinder:
         Returns the nearest 3 amenities for each category, regardless of distance (within a large radius).
         """
         if not self.api_key:
-            print("⚠️ MapTiler API Key not found!")
+            print("⚠️ MapTiler API Key not found! Using mock data.")
             return self._get_mock_amenities()
 
         amenities = {
@@ -31,6 +31,7 @@ class AmenitiesFinder:
             'parks': ['park', 'garden']
         }
 
+        total_results = 0
         for category, queries in searches.items():
             category_results = []
             for query in queries:
@@ -44,7 +45,7 @@ class AmenitiesFinder:
                         'bbox': f"{lng-0.5},{lat-0.5},{lng+0.5},{lat+0.5}" # ~50km box
                     }
                     
-                    response = requests.get(url, params=params)
+                    response = requests.get(url, params=params, timeout=10)
                     if response.status_code == 200:
                         features = response.json().get('features', [])
                         for feature in features:
@@ -52,12 +53,12 @@ class AmenitiesFinder:
                             dist = self._calculate_distance(lat, lng, place_lat, place_lng)
                             
                             # Calculate estimated travel time (walking speed ~5 km/h, driving ~30 km/h in city)
-                            walking_time = round((dist / 5) * 60)  # minutes
-                            driving_time = round((dist / 30) * 60)  # minutes
+                            walking_time = max(1, round((dist / 5) * 60))  # minutes, minimum 1
+                            driving_time = max(1, round((dist / 30) * 60))  # minutes, minimum 1
                             
                             item = {
-                                'name': feature['place_name'],
-                                'distance': round(dist, 2),
+                                'name': feature.get('place_name', feature.get('text', 'Unknown')),
+                                'distance': round(dist, 2) if dist > 0 else 0.1,
                                 'walkingTime': walking_time,
                                 'drivingTime': driving_time,
                                 'lat': place_lat,
@@ -67,12 +68,26 @@ class AmenitiesFinder:
                             # Avoid duplicates
                             if not any(x['name'] == item['name'] for x in category_results):
                                 category_results.append(item)
+                    else:
+                        print(f"API error for {query}: Status {response.status_code}")
                 except Exception as e:
                     print(f"Error searching for {query}: {e}")
             
             # Sort by distance and take top 3
             category_results.sort(key=lambda x: x['distance'])
             amenities[category] = category_results[:3]
+            total_results += len(amenities[category])
+
+        # If no results found at all, use mock data
+        if total_results == 0:
+            print("⚠️ No amenities found from API, using mock data")
+            return self._get_mock_amenities()
+
+        # Fill empty categories with mock data
+        mock = self._get_mock_amenities()
+        for category in amenities:
+            if len(amenities[category]) == 0:
+                amenities[category] = mock[category]
 
         return amenities
 

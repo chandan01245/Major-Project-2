@@ -100,12 +100,15 @@ class MLService {
   }
 
   // Fallback report generation when backend is unavailable
-  generateFallbackReport(polygon, attributes, nearbyAreas) {
+  generateFallbackReport(polygon, attributes, nearbyAreas, cityId = 'bangalore') {
     const area = this.calculatePolygonArea(polygon);
     const centroid = this.getPolygonCentroid(polygon);
     
-    // Calculate price per sqft based on nearby areas
-    const avgPrice = this.calculateAveragePrice(nearbyAreas);
+    // Get city-specific data
+    const cityData = this.getCityData(cityId);
+    
+    // Calculate price per sqft based on nearby areas and city data
+    const avgPrice = this.calculateAveragePrice(nearbyAreas, cityData);
     const priceRange = {
       min: Math.round(avgPrice * 0.85),
       max: Math.round(avgPrice * 1.15),
@@ -143,6 +146,12 @@ class MLService {
     
     return {
       generatedAt: new Date().toISOString(),
+      cityInfo: {
+        id: cityId,
+        name: cityData.name,
+        currency: cityData.currency,
+        currencySymbol: cityData.currencySymbol
+      },
       parcelInfo: {
         area: Math.round(area),
         perimeter: Math.round(this.calculatePerimeter(polygon)),
@@ -156,7 +165,9 @@ class MLService {
           max: Math.round(areaSqft * priceRange.max),
           average: Math.round(areaSqft * priceRange.average)
         },
-        marketTrend: this.getMarketTrend(nearbyAreas)
+        marketTrend: this.getMarketTrend(nearbyAreas),
+        currency: cityData.currency,
+        currencySymbol: cityData.currencySymbol
       },
       zoningDetails: attributes,
       amenities,
@@ -200,11 +211,13 @@ class MLService {
     return [x, y];
   }
 
-  calculateAveragePrice(nearbyAreas) {
-    if (nearbyAreas.length === 0) return 8500;
-    return Math.round(
-      nearbyAreas.reduce((sum, area) => sum + area.value, 0) / nearbyAreas.length
+  calculateAveragePrice(nearbyAreas, cityData) {
+    if (nearbyAreas.length === 0) return cityData?.avgPricePerSqft || 8500;
+    const nearbyAvg = Math.round(
+      nearbyAreas.reduce((sum, area) => sum + (area.price || area.value), 0) / nearbyAreas.length
     );
+    // Use nearby average if available, otherwise use city average
+    return nearbyAvg || cityData?.avgPricePerSqft || 8500;
   }
 
   async findNearbyAmenities(centroid) {
@@ -460,6 +473,62 @@ class MLService {
 
   deleteDocument(id) {
     this.zoningDocuments = this.zoningDocuments.filter(doc => doc.id !== id);
+  }
+
+  // Get city-specific data including currency and pricing
+  getCityData(cityId) {
+    const cityDatabase = {
+      bangalore: {
+        name: 'Bangalore',
+        country: 'India',
+        currency: 'INR',
+        currencySymbol: '₹',
+        avgPricePerSqft: 11500, // ₹11,000 - ₹12,500
+        marketTier: 'Tier 1'
+      },
+      mumbai: {
+        name: 'Mumbai',
+        country: 'India',
+        currency: 'INR',
+        currencySymbol: '₹',
+        avgPricePerSqft: 18500, // ₹16,000 - ₹21,000
+        marketTier: 'Tier 1'
+      },
+      delhi: {
+        name: 'Delhi',
+        country: 'India',
+        currency: 'INR',
+        currencySymbol: '₹',
+        avgPricePerSqft: 9500, // ₹7,500 - ₹12,000
+        marketTier: 'Tier 1'
+      },
+      hyderabad: {
+        name: 'Hyderabad',
+        country: 'India',
+        currency: 'INR',
+        currencySymbol: '₹',
+        avgPricePerSqft: 9000, // ₹7,500 - ₹11,500
+        marketTier: 'Tier 1'
+      },
+      new_york: {
+        name: 'New York',
+        country: 'USA',
+        currency: 'USD',
+        currencySymbol: '$',
+        avgPricePerSqft: 900, // $450 - $1300
+        marketTier: 'Global'
+      },
+      singapore: {
+        name: 'Singapore',
+        country: 'Singapore',
+        currency: 'SGD',
+        currencySymbol: 'S$',
+        avgPricePerSqft: 1400, // S$600 - S$2200
+        marketTier: 'Global'
+      }
+    };
+
+    return cityDatabase[cityId] || cityDatabase.bangalore;
   }
 }
 

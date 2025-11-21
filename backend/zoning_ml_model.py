@@ -185,7 +185,7 @@ class ZoningMLModel:
             'model_version': self.model_version
         }
     
-    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None):
+    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None, area=None):
         """Generate full ML-powered report"""
         # Extract features
         features = self.extract_features(polygon, nearby_areas)
@@ -194,7 +194,13 @@ class ZoningMLModel:
         predictions = self.predict(features)
         
         # Calculate additional metrics
-        area = self._calculate_area(polygon)
+        # Use provided area (from frontend turf.js) if available, otherwise calculate
+        if area is None or area == 0:
+            area = self._calculate_area(polygon)
+            print(f"⚠️ Area calculated by backend: {area:.2f} sqm")
+        else:
+            print(f"✅ Area provided by frontend: {area:.2f} sqm")
+            
         centroid = self._get_centroid(polygon)
         perimeter = self._calculate_perimeter(polygon)
         
@@ -491,38 +497,77 @@ class ZoningMLModel:
         coverage_range = attributes['groundCoverage'].split('-')
         coverage_max = float(coverage_range[1].strip().replace('%', '')) / 100
         
-        max_built_area = area * far_max
+        # Calculate based on FAR: Total Built-up Area = Plot Area × FAR
+        # Ground floor coverage area (maximum allowed footprint)
         ground_floor_area = area * coverage_max
-        floors = int(max_built_area / ground_floor_area) if ground_floor_area > 0 else 1
+        
+        print(f"\n📊 Scenario Calculation Debug:")
+        print(f"Plot Area: {area:.2f} sqm ({area * 10.764:.2f} sqft)")
+        print(f"Max FAR: {far_max}, Max Ground Coverage: {coverage_max * 100}%")
+        print(f"Ground Floor Area: {ground_floor_area:.2f} sqm ({ground_floor_area * 10.764:.2f} sqft)")
+        
+        # Conservative scenario
+        conservative_far = round(far_max * 0.6, 1)
+        conservative_built_area = area * conservative_far
+        conservative_floors = max(1, int(conservative_built_area / ground_floor_area)) if ground_floor_area > 0 else 1
+        
+        print(f"\n🏗️ Conservative: FAR={conservative_far}")
+        print(f"  Built-up Area: {conservative_built_area:.2f} sqm ({conservative_built_area * 10.764:.2f} sqft)")
+        print(f"  Floors: {conservative_floors}")
+        print(f"  Avg Floor Area: {conservative_built_area / conservative_floors:.2f} sqm ({(conservative_built_area / conservative_floors) * 10.764:.2f} sqft)")
+        
+        # Moderate scenario
+        moderate_far = round(far_max * 0.8, 1)
+        moderate_built_area = area * moderate_far
+        moderate_floors = max(1, int(moderate_built_area / ground_floor_area)) if ground_floor_area > 0 else 1
+        
+        print(f"\n🏗️ Moderate: FAR={moderate_far}")
+        print(f"  Built-up Area: {moderate_built_area:.2f} sqm ({moderate_built_area * 10.764:.2f} sqft)")
+        print(f"  Floors: {moderate_floors}")
+        print(f"  Avg Floor Area: {moderate_built_area / moderate_floors:.2f} sqm ({(moderate_built_area / moderate_floors) * 10.764:.2f} sqft)")
+        
+        # Maximum scenario
+        max_built_area = area * far_max
+        max_floors = max(1, int(max_built_area / ground_floor_area)) if ground_floor_area > 0 else 1
+        
+        print(f"\n🏗️ Maximum: FAR={far_max}")
+        print(f"  Built-up Area: {max_built_area:.2f} sqm ({max_built_area * 10.764:.2f} sqft)")
+        print(f"  Floors: {max_floors}")
+        print(f"  Avg Floor Area: {max_built_area / max_floors:.2f} sqm ({(max_built_area / max_floors) * 10.764:.2f} sqft)\n")
+        
+        # Convert to square feet for frontend display (1 sqm = 10.764 sqft)
+        conservative_built_area_sqft = conservative_built_area * 10.764
+        moderate_built_area_sqft = moderate_built_area * 10.764
+        max_built_area_sqft = max_built_area * 10.764
         
         return [
             {
                 'name': 'Conservative',
                 'description': 'Minimum FAR utilization with maximum open space',
-                'far': round(far_max * 0.6, 1),
-                'floors': int(floors * 0.6),
-                'builtArea': int(max_built_area * 0.6),
-                'openSpace': int(area * 0.5),
-                'estimatedCost': int(max_built_area * 0.6 * 35000),
+                'far': conservative_far,
+                'floors': conservative_floors,
+                'builtArea': int(conservative_built_area_sqft),
+                'openSpace': int(area * 0.5 * 10.764),
+                'estimatedCost': int(conservative_built_area * 35000),
                 'roi': '12-15%'
             },
             {
                 'name': 'Moderate',
                 'description': 'Balanced development with good open space',
-                'far': round(far_max * 0.8, 1),
-                'floors': int(floors * 0.8),
-                'builtArea': int(max_built_area * 0.8),
-                'openSpace': int(area * 0.35),
-                'estimatedCost': int(max_built_area * 0.8 * 35000),
+                'far': moderate_far,
+                'floors': moderate_floors,
+                'builtArea': int(moderate_built_area_sqft),
+                'openSpace': int(area * 0.35 * 10.764),
+                'estimatedCost': int(moderate_built_area * 35000),
                 'roi': '15-18%'
             },
             {
                 'name': 'Maximum',
                 'description': 'Full FAR utilization for maximum returns',
                 'far': far_max,
-                'floors': floors,
-                'builtArea': int(max_built_area),
-                'openSpace': int(area * 0.25),
+                'floors': max_floors,
+                'builtArea': int(max_built_area_sqft),
+                'openSpace': int(area * 0.25 * 10.764),
                 'estimatedCost': int(max_built_area * 35000),
                 'roi': '18-22%'
             }

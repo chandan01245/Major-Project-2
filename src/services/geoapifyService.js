@@ -336,11 +336,29 @@ class GeoapifyService {
     if (!API_KEY) return [];
 
     try {
+      // Validate coordinates
+      if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+        console.error('Invalid coordinates:', { lat, lng });
+        return [];
+      }
+
       const categoryString = categories.join(",");
       const radius = 5000; // 5km radius
-      const url = `https://api.geoapify.com/v2/places?categories=${categoryString}&filter=circle:${lng},${lat},${radius}&limit=20&apiKey=${API_KEY}`;
+      // Use proper URL encoding and correct parameter order
+      const url = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(categoryString)}&filter=circle:${lng},${lat},${radius}&limit=20&apiKey=${API_KEY}`;
+
+      console.log('Fetching amenities from:', url.replace(API_KEY, 'API_KEY_HIDDEN'));
 
       const response = await fetch(url);
+      
+      // Check for HTTP errors
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Geoapify API error (${response.status}):`, errorText);
+        console.error('Request URL:', url.replace(API_KEY, 'API_KEY_HIDDEN'));
+        return [];
+      }
+
       const data = await response.json();
 
       if (!data || !data.features) return [];

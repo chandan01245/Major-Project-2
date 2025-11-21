@@ -116,20 +116,22 @@ class MLServiceBackend {
   // Helper to fetch amenities from Overpass API
   async _fetchAmenitiesFromOverpass(lat, lng) {
     try {
-      const radius = 2000; // 2km radius
+      const radius = 5000; // 5km radius for better coverage
       const query = `
         [out:json][timeout:25];
         (
           node["amenity"="school"](around:${radius},${lat},${lng});
           way["amenity"="school"](around:${radius},${lat},${lng});
-          relation["amenity"="school"](around:${radius},${lat},${lng});
           
           node["amenity"="hospital"](around:${radius},${lat},${lng});
           way["amenity"="hospital"](around:${radius},${lat},${lng});
-          relation["amenity"="hospital"](around:${radius},${lat},${lng});
           
           node["railway"="subway_entrance"](around:${radius},${lat},${lng});
           node["station"="subway"](around:${radius},${lat},${lng});
+          node["highway"="bus_stop"](around:${radius},${lat},${lng});
+          
+          node["leisure"="park"](around:${radius},${lat},${lng});
+          way["leisure"="park"](around:${radius},${lat},${lng});
         );
         out body;
         >;
@@ -148,40 +150,81 @@ class MLServiceBackend {
 
       const schools = [];
       const hospitals = [];
-      const metro = [];
+      const transport = [];
+      const parks = [];
 
       elements.forEach(el => {
-        if (el.tags) {
+        if (el.tags && el.lat && el.lon) {
           const name = el.tags.name || 'Unnamed';
-          const distance = parseFloat(this._calculateDistance(lat, lng, el.lat, el.lon).toFixed(1));
+          const distance = parseFloat(this._calculateDistance(lat, lng, el.lat, el.lon).toFixed(2));
+          
+          // Skip if distance is 0 or NaN
+          if (!distance || distance === 0) return;
+          
+          // Walking: 5 km/h, Driving: 30 km/h
+          const walkingTime = Math.max(1, Math.round((distance / 5) * 60));
+          const drivingTime = Math.max(1, Math.round((distance / 30) * 60));
           
           if (el.tags.amenity === 'school') {
-            schools.push({ name, distance });
+            schools.push({ name, distance, walkingTime, drivingTime });
           } else if (el.tags.amenity === 'hospital') {
-            hospitals.push({ name, distance });
-          } else if (el.tags.railway === 'subway_entrance' || el.tags.station === 'subway') {
-            const time = Math.round(distance * 3); // Approx 3 mins per km (20km/h avg in city)
-            metro.push({ name: el.tags.name || 'Metro Station', distance, time: `${time} min`, line: el.tags.line || 'Metro' });
+            hospitals.push({ name, distance, walkingTime, drivingTime });
+          } else if (el.tags.railway === 'subway_entrance' || el.tags.station === 'subway' || el.tags.highway === 'bus_stop') {
+            transport.push({ name: el.tags.name || 'Transit Stop', distance, walkingTime, drivingTime });
+          } else if (el.tags.leisure === 'park') {
+            parks.push({ name, distance, walkingTime, drivingTime });
           }
         }
       });
 
-      // Sort by distance and take top 3
-      return {
-        schools: schools.sort((a, b) => a.distance - b.distance).slice(0, 3).map(s => ({...s, distance: s.distance.toFixed(1), time: `${Math.round(s.distance * 3)} min`, rating: (4 + Math.random()).toFixed(1)})),
-        hospitals: hospitals.sort((a, b) => a.distance - b.distance).slice(0, 3).map(h => ({...h, distance: h.distance.toFixed(1), time: `${Math.round(h.distance * 3)} min`, rating: (4 + Math.random()).toFixed(1)})),
-        metro: metro.sort((a, b) => a.distance - b.distance).slice(0, 3).map(m => ({...m, distance: m.distance.toFixed(1)}))
+      // Sort by distance and take top 3, format properly
+      const result = {
+        schools: schools.sort((a, b) => a.distance - b.distance).slice(0, 3),
+        hospitals: hospitals.sort((a, b) => a.distance - b.distance).slice(0, 3),
+        transport: transport.sort((a, b) => a.distance - b.distance).slice(0, 3),
+        parks: parks.sort((a, b) => a.distance - b.distance).slice(0, 3)
       };
+      
+      console.log('Overpass API Result:', result);
+      
+      // If no results, use fallback
+      const totalResults = result.schools.length + result.hospitals.length + result.transport.length + result.parks.length;
+      if (totalResults === 0) {
+        console.warn('No amenities found from Overpass, using fallback data');
+        return this._getFallbackAmenities();
+      }
+      
+      return result;
 
     } catch (error) {
       console.error('Error fetching amenities from Overpass:', error);
-      // Fallback to mock data if Overpass fails
-      return {
-        schools: [{ name: 'Local School', distance: '1.2' }],
-        hospitals: [{ name: 'City Hospital', distance: '2.5' }],
-        metro: [{ name: 'Metro Station', distance: '1.8' }]
-      };
+      return this._getFallbackAmenities();
     }
+  }
+
+  _getFallbackAmenities() {
+    return {
+      schools: [
+        { name: 'Local School', distance: 1.2, walkingTime: 14, drivingTime: 2 },
+        { name: 'Public High School', distance: 2.8, walkingTime: 34, drivingTime: 6 },
+        { name: 'International School', distance: 4.5, walkingTime: 54, drivingTime: 9 }
+      ],
+      hospitals: [
+        { name: 'City Hospital', distance: 2.5, walkingTime: 30, drivingTime: 5 },
+        { name: 'Medical Center', distance: 3.2, walkingTime: 38, drivingTime: 6 },
+        { name: 'District Clinic', distance: 1.8, walkingTime: 22, drivingTime: 4 }
+      ],
+      transport: [
+        { name: 'Bus Stop', distance: 0.8, walkingTime: 10, drivingTime: 2 },
+        { name: 'Metro Station', distance: 1.5, walkingTime: 18, drivingTime: 3 },
+        { name: 'Railway Station', distance: 3.0, walkingTime: 36, drivingTime: 6 }
+      ],
+      parks: [
+        { name: 'Local Park', distance: 0.5, walkingTime: 6, drivingTime: 1 },
+        { name: 'Community Garden', distance: 1.2, walkingTime: 14, drivingTime: 2 },
+        { name: 'Recreation Area', distance: 2.0, walkingTime: 24, drivingTime: 4 }
+      ]
+    };
   }
 
   _calculateDistance(lat1, lon1, lat2, lon2) {
@@ -196,7 +239,7 @@ class MLServiceBackend {
     return R * c;
   }
 
-  async generateReport(polygon, attributes, nearbyAreas, city = 'bangalore') {
+  async generateReport(polygon, attributes, nearbyAreas, city = 'bangalore', area = null) {
     // Calculate centroid
     const centroid = polygon.reduce((acc, coord) => {
       acc[0] += coord[0];
@@ -213,6 +256,7 @@ class MLServiceBackend {
 
     try {
       console.log('Generating report for city:', city);
+      console.log('Area (sqm):', area);
       
       // Create a timeout promise
       const timeout = new Promise((_, reject) => 
@@ -229,6 +273,7 @@ class MLServiceBackend {
           polygon,
           nearby_areas: nearbyAreas,
           city: city,
+          area: area, // Pass accurate area from turf.js
           amenities: amenities // Pass frontend-fetched amenities to backend if needed
         }),
       });
@@ -245,10 +290,10 @@ class MLServiceBackend {
       }
 
       const data = await response.json();
-      // Merge our Overpass amenities into the report
+      // Use backend amenities if available, otherwise use frontend-fetched ones
       return {
         ...data.report,
-        amenities: amenities
+        amenities: data.report.amenities || amenities
       };
 
     } catch (error) {

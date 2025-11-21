@@ -3,7 +3,12 @@ import "jspdf-autotable";
 
 class PDFService {
   generateReport(report) {
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      compress: true
+    });
+    
+    // Use standard fonts to avoid encoding issues
+    doc.setFont("helvetica");
     const {
       parcelInfo,
       pricing,
@@ -38,13 +43,13 @@ class PDFService {
     yPos = this.addSectionTitle(doc, "Parcel Information", yPos, primaryColor);
 
     const parcelData = [
-      ["Total Area", `${parcelInfo.area.toLocaleString()} m²`],
+      ["Total Area", `${parcelInfo.area.toLocaleString()} sq.m`],
       ["Perimeter", `${parcelInfo.perimeter.toLocaleString()} m`],
       [
         "Coordinates",
         `${parcelInfo.centroid[1].toFixed(
           6
-        )}°N, ${parcelInfo.centroid[0].toFixed(6)}°E`,
+        )} deg N, ${parcelInfo.centroid[0].toFixed(6)} deg E`,
       ],
       [
         "Analysis Date",
@@ -71,15 +76,15 @@ class PDFService {
     const pricingData = [
       [
         "Average Price/Sqft",
-        `₹${pricing.pricePerSqft.average.toLocaleString()}`,
+        `Rs. ${pricing.pricePerSqft.average.toLocaleString()}`,
       ],
       [
         "Price Range",
-        `₹${pricing.pricePerSqft.min.toLocaleString()} - ₹${pricing.pricePerSqft.max.toLocaleString()}`,
+        `Rs. ${pricing.pricePerSqft.min.toLocaleString()} - Rs. ${pricing.pricePerSqft.max.toLocaleString()}`,
       ],
       [
         "Estimated Property Value",
-        `₹${(pricing.estimatedValue.average / 10000000).toFixed(2)} Crores`,
+        `Rs. ${(pricing.estimatedValue.average / 10000000).toFixed(2)} Crores`,
       ],
       [
         "Market Trend",
@@ -483,19 +488,19 @@ class PDFService {
         [
           "Built-up Area",
           scenario.builtArea
-            ? `${scenario.builtArea.toLocaleString()} m²`
+            ? `${scenario.builtArea.toLocaleString()} sq.m`
             : "N/A",
         ],
         [
           "Open Space",
           scenario.openSpace
-            ? `${scenario.openSpace.toLocaleString()} m²`
+            ? `${scenario.openSpace.toLocaleString()} sq.m`
             : "N/A",
         ],
         [
           "Estimated Cost",
           scenario.estimatedCost
-            ? `₹${(scenario.estimatedCost / 10000000).toFixed(2)} Crores`
+            ? `Rs. ${(scenario.estimatedCost / 10000000).toFixed(2)} Crores`
             : "N/A",
         ],
         ["Expected ROI", scenario.roi || "N/A"],

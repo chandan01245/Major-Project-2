@@ -167,6 +167,7 @@ const IndianUrbanForm = () => {
   const loadCityData = async (city) => {
     setIsLoadingZones(true);
     setCityZones([]);
+    setShowZoneOverlays(false); // Reset highlight mode when changing cities
 
     // Fly to city
     if (mapRef.current) {
@@ -624,8 +625,7 @@ const IndianUrbanForm = () => {
       });
       mapRef.current.on("mouseleave", "zones-fill", () => {
         mapRef.current.getCanvas().style.cursor = "";
-      })
-    }
+      });
   };
 
   const renderCityMarkers = () => {
@@ -943,15 +943,17 @@ const IndianUrbanForm = () => {
         nearbyAreas,
         cityId
       );
+      // Pass the accurate area calculated by turf.js
+      const areaSqM = currentDrawingArea;
       const report = await mlService.generateReport(
         polygon,
         attributes,
         nearbyAreas,
-        cityId
+        cityId,
+        areaSqM
       );
 
       // Calculate Traffic Impact
-      const areaSqM = currentDrawingArea;
       const trafficStats = trafficService.calculateTripGeneration(
         areaSqM,
         attributes.zoneType
@@ -966,6 +968,7 @@ const IndianUrbanForm = () => {
         congestion: congestionImpact,
       };
 
+      console.log('Generated Report Amenities:', report.amenities);
       setGeneratedReport(report);
       setShowReportPreview(true);
     } catch (error) {
@@ -1720,35 +1723,60 @@ const IndianUrbanForm = () => {
 
         {/* 3D View Controls - Show after drawing */}
         {show3DView && drawnPolygon && !showReportPreview && (
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-emerald-500 to-green-600 px-8 py-4 rounded-2xl shadow-2xl border-2 border-white flex items-center gap-6 animate-in slide-in-from-bottom-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-white font-bold text-lg">
-                3D Visualization Active
-              </span>
-              <span className="text-emerald-100 text-sm">
-                Viewing parcel in 3D mode
-              </span>
+          <div 
+            className={`absolute bottom-8 transition-all duration-300 ${
+              sidebarOpen ? 'left-[calc(50%+192px)]' : 'left-1/2'
+            } transform -translate-x-1/2 z-40`}
+          >
+            <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-4 rounded-2xl shadow-2xl border-2 border-white flex flex-col md:flex-row items-center gap-4 animate-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
+                  <Building className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-base">
+                    Ready to Generate
+                  </span>
+                  <span className="text-emerald-100 text-xs">
+                    {Math.round(currentDrawingArea * 10.764).toLocaleString()} sqft parcel
+                  </span>
+                </div>
+              </div>
+              
+              <div className="h-px md:h-12 w-full md:w-px bg-white/30" />
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={isGeneratingReport}
+                  className="bg-white text-emerald-600 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-all shadow-lg flex items-center gap-2 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  {isGeneratingReport ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-5 h-5" />
+                      Generate Report
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    if (drawRef.current) {
+                      drawRef.current.deleteAll();
+                      handleDrawDelete();
+                    }
+                  }}
+                  className="bg-white/20 backdrop-blur-sm text-white px-4 py-3 rounded-xl font-medium hover:bg-white/30 transition-all flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear
+                </button>
+              </div>
             </div>
-            <div className="h-12 w-px bg-white/30" />
-            <button
-              onClick={handleGenerateReport}
-              className="bg-white text-emerald-600 px-6 py-3 rounded-xl font-bold hover:bg-emerald-50 transition-all shadow-lg flex items-center gap-2 hover:scale-105"
-            >
-              <FileText className="w-5 h-5" />
-              Generate Report
-            </button>
-            <button
-              onClick={() => {
-                if (drawRef.current) {
-                  drawRef.current.deleteAll();
-                  handleDrawDelete();
-                }
-              }}
-              className="bg-white/20 text-white px-4 py-3 rounded-xl font-medium hover:bg-white/30 transition-all flex items-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              Cancel
-            </button>
           </div>
         )}
 
