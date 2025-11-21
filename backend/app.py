@@ -250,6 +250,32 @@ def delete_document(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/buildings/models', methods=['GET'])
+def get_building_models():
+    """Get list of available 3D building models"""
+    models_dir = os.path.join(os.getcwd(), 'data')
+    if not os.path.exists(models_dir):
+        return jsonify({'success': False, 'error': 'Models directory not found', 'models': []})
+
+    models = []
+    try:
+        for filename in os.listdir(models_dir):
+            if filename.endswith('.glb') or filename.endswith('.gltf'):
+                models.append({
+                    'name': filename.replace('_', ' ').replace('.glb', '').replace('.gltf', '').title(),
+                    'filename': filename,
+                    'url': f'/buildings/models/{filename}'
+                })
+        return jsonify({'success': True, 'models': models})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e), 'models': []})
+
+@app.route('/api/buildings/models/<path:filename>')
+def serve_building_model(filename):
+    """Serve 3D building model files"""
+    models_dir = os.path.join(os.getcwd(), 'data')
+    return send_from_directory(models_dir, filename)
+
 if __name__ == '__main__':
     print("🚀 Starting ML-Powered Zoning Regulation Backend...")
     print("📊 Loading pre-trained models...")

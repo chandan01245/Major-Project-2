@@ -58,7 +58,6 @@ const IndianUrbanForm = () => {
   const [isLoading3D, setIsLoading3D] = useState(false);
   const [show3DView, setShow3DView] = useState(false);
   const [isLoadingZones, setIsLoadingZones] = useState(false);
-  const [generated3DAssets, setGenerated3DAssets] = useState(null);
   const [buildingModels, setBuildingModels] = useState([]);
   const [placedBuildings, setPlacedBuildings] = useState([]);
 
@@ -600,103 +599,6 @@ const IndianUrbanForm = () => {
         }
       }
 
-      // Render Procedural 3D Assets (Buildings & Trees) - INDEPENDENT of generatedReport
-      console.log("3D Check:", {
-        hasAssets: !!generated3DAssets,
-        hasPolygon: !!drawnPolygon,
-        timestamp: Date.now(),
-      });
-
-      if (generated3DAssets && drawnPolygon) {
-        console.log("✅ Rendering 3D Assets:", generated3DAssets);
-        console.log(
-          "Building count:",
-          generated3DAssets.buildings?.features?.length
-        );
-        console.log("Tree count:", generated3DAssets.trees?.features?.length);
-
-        // Buildings
-        const buildingsSourceId = "procedural-buildings";
-        const buildingsLayerId = "procedural-buildings-extrude";
-
-        if (mapRef.current.getSource(buildingsSourceId)) {
-          if (mapRef.current.getLayer(buildingsLayerId))
-            mapRef.current.removeLayer(buildingsLayerId);
-          mapRef.current.removeSource(buildingsSourceId);
-        }
-
-        mapRef.current.addSource(buildingsSourceId, {
-          type: "geojson",
-          data: generated3DAssets.buildings,
-        });
-
-        mapRef.current.addLayer({
-          id: buildingsLayerId,
-          type: "fill-extrusion",
-          source: buildingsSourceId,
-          paint: {
-            "fill-extrusion-color": ["coalesce", ["get", "color"], "#93c5fd"],
-            "fill-extrusion-height": ["get", "height"],
-            "fill-extrusion-opacity": 0.85,
-            "fill-extrusion-base": 0,
-          },
-        });
-
-        console.log(
-          `🏢 Rendered ${generated3DAssets.buildings.features.length} buildings on map`
-        );
-
-        // Trees
-        const treesSourceId = "procedural-trees";
-        const treesLayerId = "procedural-trees-extrude";
-
-        if (mapRef.current.getSource(treesSourceId)) {
-          if (mapRef.current.getLayer(treesLayerId))
-            mapRef.current.removeLayer(treesLayerId);
-          if (mapRef.current.getLayer(treesLayerId + "-trunk"))
-            mapRef.current.removeLayer(treesLayerId + "-trunk");
-          mapRef.current.removeSource(treesSourceId);
-        }
-
-        mapRef.current.addSource(treesSourceId, {
-          type: "geojson",
-          data: generated3DAssets.trees,
-        });
-
-        mapRef.current.addLayer({
-          id: treesLayerId + "-trunk",
-          type: "fill-extrusion",
-          source: treesSourceId,
-          paint: {
-            "fill-extrusion-color": "#8B4513", // SaddleBrown
-            "fill-extrusion-height": ["get", "trunkHeight"],
-            "fill-extrusion-base": 0,
-            "fill-extrusion-opacity": 0.9,
-          },
-        });
-
-        mapRef.current.addLayer({
-          id: treesLayerId,
-          type: "fill-extrusion",
-          source: treesSourceId,
-          paint: {
-            "fill-extrusion-color": "#22c55e", // Green-500
-            "fill-extrusion-height": ["get", "canopyHeight"],
-            "fill-extrusion-base": ["get", "trunkHeight"],
-            "fill-extrusion-opacity": 0.75,
-          },
-        });
-
-        console.log(
-          `🌳 Rendered ${generated3DAssets.trees.features.length} trees on map`
-        );
-      } else {
-        console.log("❌ Not rendering 3D assets:", {
-          hasAssets: !!generated3DAssets,
-          hasPolygon: !!drawnPolygon,
-        });
-      }
-
       // Add click interaction for polygons
       mapRef.current.on("click", "zones-fill", (e) => {
         const props = e.features[0].properties;
@@ -941,7 +843,6 @@ const IndianUrbanForm = () => {
     setShow3DView(false);
     building3DService.removeAllBuildings(mapRef.current);
     setIsLoading3D(false);
-    setGenerated3DAssets(null);
 
     // Reset map view
     if (mapRef.current) {
