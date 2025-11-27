@@ -1,12 +1,13 @@
+import json
 import os
 import re
-import json
 from datetime import datetime
+
+import nltk
 import pdfplumber
 from docx import Document
-import nltk
-from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
+from nltk.tokenize import sent_tokenize, word_tokenize
 
 # Download required NLTK data
 try:
@@ -205,10 +206,25 @@ class DocumentProcessor:
     def get_documents(self, city=None):
         """Get list of all processed documents, optionally filtered by city"""
         docs = self.documents
-        
+
         if city:
-            docs = self.documents_by_city.get(city, [])
-        
+            # Try exact match first
+            exact = self.documents_by_city.get(city)
+            if exact:
+                docs = exact
+            else:
+                # Fall back to a normalized-match: compare lowercase without spaces/underscores
+                target = city.lower().replace(' ', '').replace('_', '')
+                matched = []
+                for doc in self.documents:
+                    doc_city = str(doc.get('city', 'unknown'))
+                    if doc_city.lower() == city.lower():
+                        matched.append(doc)
+                        continue
+                    if doc_city.lower().replace(' ', '').replace('_', '') == target:
+                        matched.append(doc)
+                docs = matched
+
         return [
             {
                 'id': doc['id'],

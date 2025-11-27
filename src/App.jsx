@@ -208,29 +208,16 @@ const IndianUrbanForm = () => {
 
   const fetchExistingDocuments = async (cityId) => {
     try {
-      const docs = await mlService.getDocuments();
-      console.log("All documents:", docs);
-      console.log("City ID:", cityId);
+      const docs = await mlService.getDocuments(cityId);
+      console.log("Fetched documents for city:", cityId, docs);
+      setUploadedDocuments(docs || []);
 
-      // Filter documents for this city (case-insensitive)
-      const cityDocs = docs.filter((d) => {
-        if (!d.city) return false;
-        return d.city.toLowerCase() === cityId.toLowerCase();
-      });
-
-      console.log("Filtered city docs:", cityDocs);
-      setUploadedDocuments(cityDocs);
-
-      // Check if no documents exist for this city
-      if (cityDocs.length === 0) {
-        // We can show a toast or just rely on the modal that pops up when drawing
-        // But user asked to "check if there is a zoning document... and also add the rest of the major cities"
-        // The modal logic is already in toggleDrawMode, but we can also show a subtle alert here if needed.
-        // For now, we'll rely on the modal when they try to act, but we could auto-show the modal if we wanted to be aggressive.
-        // Let's just ensure the state is correct.
+      if (!docs || docs.length === 0) {
+        console.log(`No zoning documents found for ${cityId}`);
       }
     } catch (error) {
       console.error("Error fetching documents:", error);
+      setUploadedDocuments([]);
     }
   };
 
@@ -449,22 +436,24 @@ const IndianUrbanForm = () => {
     markersRef.current = [];
 
     // Prepare polygon features
-    const features = showZoneOverlays ? cityZones
-      .filter((zone) => zone.isPolygon)
-      .map((zone) => ({
-        type: "Feature",
-        geometry: zone.geometry,
-        properties: {
-          color: zone.color,
-          name: zone.name,
-          type: zone.type,
-        },
-      })) : [];
+    const features = showZoneOverlays
+      ? cityZones
+          .filter((zone) => zone.isPolygon)
+          .map((zone) => ({
+            type: "Feature",
+            geometry: zone.geometry,
+            properties: {
+              color: zone.color,
+              name: zone.name,
+              type: zone.type,
+            },
+          }))
+      : [];
 
     // Update or create zones source and layers
     if (showZoneOverlays && features.length > 0) {
       const zonesSource = mapRef.current.getSource("zones");
-      
+
       if (zonesSource) {
         // Update existing source instead of removing and re-adding
         zonesSource.setData({
@@ -512,120 +501,124 @@ const IndianUrbanForm = () => {
     }
 
     // Remove procedural 3D layers if they exist
-    ["procedural-buildings-extrude", "procedural-trees-extrude", "procedural-trees-extrude-trunk"].forEach((layer) => {
+    [
+      "procedural-buildings-extrude",
+      "procedural-trees-extrude",
+      "procedural-trees-extrude-trunk",
+    ].forEach((layer) => {
       if (mapRef.current.getLayer(layer)) mapRef.current.removeLayer(layer);
     });
     ["procedural-buildings", "procedural-trees"].forEach((source) => {
       if (mapRef.current.getSource(source)) mapRef.current.removeSource(source);
     });
 
-      // Add 3D Extrusion for Drawn Polygon if available
-      if (drawnPolygon && generatedReport) {
-        // Ensure source exists for drawn polygon if not already handled by Draw control
-        // Actually, MapboxDraw handles the 2D display. For 3D, we need a separate layer.
+    // Add 3D Extrusion for Drawn Polygon if available
+    if (drawnPolygon && generatedReport) {
+      // Ensure source exists for drawn polygon if not already handled by Draw control
+      // Actually, MapboxDraw handles the 2D display. For 3D, we need a separate layer.
 
-        const extrusionSourceId = "drawn-polygon-extrusion";
-        const extrusionLayerId = "drawn-polygon-3d";
+      const extrusionSourceId = "drawn-polygon-extrusion";
+      const extrusionLayerId = "drawn-polygon-3d";
 
-        if (mapRef.current.getSource(extrusionSourceId)) {
-          mapRef.current.removeLayer(extrusionLayerId);
-          mapRef.current.removeSource(extrusionSourceId);
-        }
-
-        mapRef.current.addSource(extrusionSourceId, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [drawnPolygon],
-            },
-          },
-        });
-
-        // Determine height based on FAR or default
-        // generatedReport.zoningDetails.maxHeight is a string like "15m - 45m"
-        // We'll parse it or use a default
-        let height = 20; // default meters
-        if (generatedReport.zoningDetails?.maxHeight) {
-          const match = generatedReport.zoningDetails.maxHeight.match(/(\d+)/);
-          if (match) height = parseInt(match[0], 10);
-        }
-
-        mapRef.current.addLayer({
-          id: extrusionLayerId,
-          type: "fill-extrusion",
-          source: extrusionSourceId,
-          paint: {
-            "fill-extrusion-color": "#fbb03b",
-            "fill-extrusion-height": height,
-            "fill-extrusion-opacity": 0.8,
-          },
-        });
-
-        // Also compute and show buildings that intersect this parcel (demo using sampleBuildings)
-        try {
-          const parcel = turf.polygon([drawnPolygon]);
-          const inside = (sampleBuildings.features || []).filter((f) => {
-            try {
-              return turf.booleanIntersects(f, parcel);
-            } catch (e) {
-              return false;
-            }
-          });
-
-          const buildingsSourceId = "buildings-in-polygon";
-          const buildingsLayerId = "buildings-in-polygon-extrude";
-
-          if (mapRef.current.getSource(buildingsSourceId)) {
-            if (mapRef.current.getLayer(buildingsLayerId))
-              mapRef.current.removeLayer(buildingsLayerId);
-            mapRef.current.removeSource(buildingsSourceId);
-          }
-
-          mapRef.current.addSource(buildingsSourceId, {
-            type: "geojson",
-            data: {
-              type: "FeatureCollection",
-              features: inside,
-            },
-          });
-
-          mapRef.current.addLayer({
-            id: buildingsLayerId,
-            type: "fill-extrusion",
-            source: buildingsSourceId,
-            paint: {
-              "fill-extrusion-color": "#6699FF",
-              "fill-extrusion-height": [
-                "coalesce",
-                ["get", "height"],
-                ["*", ["to-number", ["get", "building:levels"]], 3],
-                8,
-              ],
-              "fill-extrusion-opacity": 0.95,
-            },
-          });
-        } catch (e) {
-          console.warn("Error computing buildings inside parcel:", e);
-        }
+      if (mapRef.current.getSource(extrusionSourceId)) {
+        mapRef.current.removeLayer(extrusionLayerId);
+        mapRef.current.removeSource(extrusionSourceId);
       }
 
-      // Add click interaction for polygons
-      mapRef.current.on("click", "zones-fill", (e) => {
-        const props = e.features[0].properties;
-        // Find full zone object
-        const zone = cityZones.find((z) => z.name === props.name);
-        if (zone) handleAreaClick(zone);
+      mapRef.current.addSource(extrusionSourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [drawnPolygon],
+          },
+        },
       });
 
-      // Cursor pointer
-      mapRef.current.on("mouseenter", "zones-fill", () => {
-        mapRef.current.getCanvas().style.cursor = "pointer";
+      // Determine height based on FAR or default
+      // generatedReport.zoningDetails.maxHeight is a string like "15m - 45m"
+      // We'll parse it or use a default
+      let height = 20; // default meters
+      if (generatedReport.zoningDetails?.maxHeight) {
+        const match = generatedReport.zoningDetails.maxHeight.match(/(\d+)/);
+        if (match) height = parseInt(match[0], 10);
+      }
+
+      mapRef.current.addLayer({
+        id: extrusionLayerId,
+        type: "fill-extrusion",
+        source: extrusionSourceId,
+        paint: {
+          "fill-extrusion-color": "#fbb03b",
+          "fill-extrusion-height": height,
+          "fill-extrusion-opacity": 0.8,
+        },
       });
-      mapRef.current.on("mouseleave", "zones-fill", () => {
-        mapRef.current.getCanvas().style.cursor = "";
-      });
+
+      // Also compute and show buildings that intersect this parcel (demo using sampleBuildings)
+      try {
+        const parcel = turf.polygon([drawnPolygon]);
+        const inside = (sampleBuildings.features || []).filter((f) => {
+          try {
+            return turf.booleanIntersects(f, parcel);
+          } catch (e) {
+            return false;
+          }
+        });
+
+        const buildingsSourceId = "buildings-in-polygon";
+        const buildingsLayerId = "buildings-in-polygon-extrude";
+
+        if (mapRef.current.getSource(buildingsSourceId)) {
+          if (mapRef.current.getLayer(buildingsLayerId))
+            mapRef.current.removeLayer(buildingsLayerId);
+          mapRef.current.removeSource(buildingsSourceId);
+        }
+
+        mapRef.current.addSource(buildingsSourceId, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: inside,
+          },
+        });
+
+        mapRef.current.addLayer({
+          id: buildingsLayerId,
+          type: "fill-extrusion",
+          source: buildingsSourceId,
+          paint: {
+            "fill-extrusion-color": "#6699FF",
+            "fill-extrusion-height": [
+              "coalesce",
+              ["get", "height"],
+              ["*", ["to-number", ["get", "building:levels"]], 3],
+              8,
+            ],
+            "fill-extrusion-opacity": 0.95,
+          },
+        });
+      } catch (e) {
+        console.warn("Error computing buildings inside parcel:", e);
+      }
+    }
+
+    // Add click interaction for polygons
+    mapRef.current.on("click", "zones-fill", (e) => {
+      const props = e.features[0].properties;
+      // Find full zone object
+      const zone = cityZones.find((z) => z.name === props.name);
+      if (zone) handleAreaClick(zone);
+    });
+
+    // Cursor pointer
+    mapRef.current.on("mouseenter", "zones-fill", () => {
+      mapRef.current.getCanvas().style.cursor = "pointer";
+    });
+    mapRef.current.on("mouseleave", "zones-fill", () => {
+      mapRef.current.getCanvas().style.cursor = "";
+    });
   };
 
   const renderCityMarkers = () => {
@@ -968,7 +961,7 @@ const IndianUrbanForm = () => {
         congestion: congestionImpact,
       };
 
-      console.log('Generated Report Amenities:', report.amenities);
+      console.log("Generated Report Amenities:", report.amenities);
       setGeneratedReport(report);
       setShowReportPreview(true);
     } catch (error) {
@@ -1723,9 +1716,9 @@ const IndianUrbanForm = () => {
 
         {/* 3D View Controls - Show after drawing */}
         {show3DView && drawnPolygon && !showReportPreview && (
-          <div 
+          <div
             className={`absolute bottom-8 transition-all duration-300 ${
-              sidebarOpen ? 'left-[calc(50%+192px)]' : 'left-1/2'
+              sidebarOpen ? "left-[calc(50%+192px)]" : "left-1/2"
             } transform -translate-x-1/2 z-40`}
           >
             <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-4 rounded-2xl shadow-2xl border-2 border-white flex flex-col md:flex-row items-center gap-4 animate-in slide-in-from-bottom-4">
@@ -1738,13 +1731,14 @@ const IndianUrbanForm = () => {
                     Ready to Generate
                   </span>
                   <span className="text-emerald-100 text-xs">
-                    {Math.round(currentDrawingArea * 10.764).toLocaleString()} sqft parcel
+                    {Math.round(currentDrawingArea * 10.764).toLocaleString()}{" "}
+                    sqft parcel
                   </span>
                 </div>
               </div>
-              
+
               <div className="h-px md:h-12 w-full md:w-px bg-white/30" />
-              
+
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleGenerateReport}
@@ -1898,7 +1892,6 @@ const IndianUrbanForm = () => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
