@@ -1,11 +1,14 @@
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 class PDFService {
   generateReport(report) {
     const doc = new jsPDF({
       compress: true
     });
+    
+    // Make autoTable available on doc instance
+    doc.autoTable = (options) => autoTable(doc, options);
     
     // Use standard fonts to avoid encoding issues
     doc.setFont("helvetica");

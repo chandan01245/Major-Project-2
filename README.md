@@ -241,6 +241,22 @@ Visit **[http://localhost:3000](http://localhost:3000)** 🎉
 
 ---
 
+## 🏗️ System Architecture
+
+![UrbanForm Pro Architecture](./architecture_diagram.png)
+
+UrbanForm Pro follows a modern **Service-Oriented Architecture (SOA)** with a clear separation between the presentation layer, business logic, and machine learning inference services.
+
+### **Data Flow Overview**
+1.  **User Interaction**: Users interact with the **React 18** frontend, drawing parcels and uploading documents.
+2.  **Geospatial Processing**: **Turf.js** handles client-side geometry calculations, while **MapTiler SDK** manages 3D rendering and map styles.
+3.  **API Communication**: The frontend communicates with a **Flask REST API** for heavy-duty processing.
+4.  **ML Inference**: The backend runs pre-trained models (**Random Forest**, **Gradient Boosting**, **LSTM**) to provide real-time zoning, FAR, and AQI predictions.
+5.  **Document Intelligence**: **spaCy** and **PyPDF2** extract regulatory data from uploaded PDFs to dynamically update zoning rules.
+6.  **Reporting**: **jsPDF** generates professional compliance reports directly in the browser for instant download.
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -1717,23 +1733,6 @@ A: Add `NETLIFY_DISABLE_SECRETS_SCANNER=true` to environment variables or use Ne
 
 **Q: Buildings too big/small**  
 A: Adjust scale in `building3DService.js`. Buildings are rendered from GeoJSON data with real-world dimensions.
-
----
-
-## 📞 Support & Contact
-
-- 📧 **Email**: support@urbanform.pro
-- 💬 **Discord**: [Join our community](https://discord.gg/urbanform)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/urbanform-pro/issues)
-- 📖 **Docs**: [Full Documentation](https://docs.urbanform.pro)
-
----
-
-## ⭐ Star History
-
-If you find this project useful, please consider giving it a star! ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=YOUR_USERNAME/urbanform-pro&type=Date)](https://star-history.com/#YOUR_USERNAME/urbanform-pro&Date)
 
 ---
 
