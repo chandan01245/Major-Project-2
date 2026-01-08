@@ -24,7 +24,48 @@ class PDFService {
       aqiForecast,
       lightningRisk,
       mlConfidence,
+      floodRisk,
+      cityInfo,
     } = report;
+
+    // Get currency symbol with fallback
+    const currencySymbol = pricing?.currencySymbol || cityInfo?.currencySymbol || "Rs.";
+    const cityName = cityInfo?.name || "Bangalore";
+    const cityId = cityInfo?.id || "bangalore";
+
+    // Helper function to format numbers based on city
+    const formatNumber = (num) => {
+      if (!num && num !== 0) return "0";
+      
+      const indianCities = ["bangalore", "mumbai", "delhi", "hyderabad"];
+      const isIndianCity = indianCities.includes(cityId.toLowerCase());
+      
+      if (isIndianCity) {
+        return formatIndianNumber(num);
+      } else {
+        return num.toLocaleString("en-US");
+      }
+    };
+
+    const formatIndianNumber = (num) => {
+      const numStr = Math.round(num).toString();
+      if (numStr.length <= 3) return numStr;
+      
+      let result = numStr.slice(-3);
+      let remaining = numStr.slice(0, -3);
+      
+      while (remaining.length > 0) {
+        if (remaining.length <= 2) {
+          result = remaining + ',' + result;
+          break;
+        } else {
+          result = remaining.slice(-2) + ',' + result;
+          remaining = remaining.slice(0, -2);
+        }
+      }
+      
+      return result;
+    };
 
     const primaryColor = [16, 185, 129]; // Emerald
     const secondaryColor = [71, 85, 105]; // Slate
@@ -36,7 +77,7 @@ class PDFService {
     let yPos = 0;
 
     // ==================== PAGE 1: COVER PAGE ====================
-    this.addCoverPage(doc, pageWidth, pageHeight, primaryColor);
+    this.addCoverPage(doc, pageWidth, pageHeight, primaryColor, cityName);
 
     // ==================== PAGE 2: PARCEL & PRICING ====================
     doc.addPage();
@@ -46,8 +87,8 @@ class PDFService {
     yPos = this.addSectionTitle(doc, "Parcel Information", yPos, primaryColor);
 
     const parcelData = [
-      ["Total Area", `${parcelInfo.area.toLocaleString()} sq.m`],
-      ["Perimeter", `${parcelInfo.perimeter.toLocaleString()} m`],
+      ["Total Area", `${formatNumber(parcelInfo.area)} sq.m`],
+      ["Perimeter", `${formatNumber(parcelInfo.perimeter)} m`],
       [
         "Coordinates",
         `${parcelInfo.centroid[1].toFixed(
@@ -59,6 +100,11 @@ class PDFService {
         new Date().toLocaleDateString("en-IN", { dateStyle: "long" }),
       ],
     ];
+
+    // Add address if available
+    if (parcelInfo.address) {
+      parcelData.unshift(["Address", parcelInfo.address]);
+    }
 
     doc.autoTable({
       startY: yPos,
@@ -79,15 +125,15 @@ class PDFService {
     const pricingData = [
       [
         "Average Price/Sqft",
-        `Rs. ${pricing.pricePerSqft.average.toLocaleString()}`,
+        `${currencySymbol} ${formatNumber(pricing.pricePerSqft.average)}`,
       ],
       [
         "Price Range",
-        `Rs. ${pricing.pricePerSqft.min.toLocaleString()} - Rs. ${pricing.pricePerSqft.max.toLocaleString()}`,
+        `${currencySymbol} ${formatNumber(pricing.pricePerSqft.min)} - ${currencySymbol} ${formatNumber(pricing.pricePerSqft.max)}`,
       ],
       [
         "Estimated Property Value",
-        `Rs. ${(pricing.estimatedValue.average / 10000000).toFixed(2)} Crores`,
+        `${currencySymbol} ${formatNumber(pricing.estimatedValue.average)}`,
       ],
       [
         "Market Trend",
@@ -209,13 +255,13 @@ class PDFService {
 
     // Schools
     if (amenities.schools && amenities.schools.length > 0) {
-      yPos = this.addSubsectionTitle(doc, "🎓 Schools", yPos);
+      yPos = this.addSubsectionTitle(doc, "Schools", yPos);
 
       const schoolData = amenities.schools.map((s) => [
         s.name || "N/A",
         `${s.distance || 0} km`,
-        `🚶 ${s.walking_time || 0} min`,
-        `🚗 ${s.driving_time || 0} min`,
+        `Walk: ${s.walkingTime || s.walking_time || 0} min`,
+        `Drive: ${s.drivingTime || s.driving_time || 0} min`,
       ]);
 
       doc.autoTable({
@@ -238,13 +284,13 @@ class PDFService {
 
     // Hospitals
     if (amenities.hospitals && amenities.hospitals.length > 0) {
-      yPos = this.addSubsectionTitle(doc, "🏥 Hospitals", yPos);
+      yPos = this.addSubsectionTitle(doc, "Hospitals", yPos);
 
       const hospitalData = amenities.hospitals.map((h) => [
         h.name || "N/A",
         `${h.distance || 0} km`,
-        `🚶 ${h.walking_time || 0} min`,
-        `🚗 ${h.driving_time || 0} min`,
+        `Walk: ${h.walkingTime || h.walking_time || 0} min`,
+        `Drive: ${h.drivingTime || h.driving_time || 0} min`,
       ]);
 
       doc.autoTable({
@@ -267,13 +313,13 @@ class PDFService {
 
     // Transport
     if (amenities.transport && amenities.transport.length > 0) {
-      yPos = this.addSubsectionTitle(doc, "🚇 Transport", yPos);
+      yPos = this.addSubsectionTitle(doc, "Transport", yPos);
 
       const transportData = amenities.transport.map((t) => [
         t.name || "N/A",
         `${t.distance || 0} km`,
-        `🚶 ${t.walking_time || 0} min`,
-        `🚗 ${t.driving_time || 0} min`,
+        `Walk: ${t.walkingTime || t.walking_time || 0} min`,
+        `Drive: ${t.drivingTime || t.driving_time || 0} min`,
       ]);
 
       doc.autoTable({
@@ -302,13 +348,13 @@ class PDFService {
         yPos = margin;
       }
 
-      yPos = this.addSubsectionTitle(doc, "🌳 Parks", yPos);
+      yPos = this.addSubsectionTitle(doc, "Parks", yPos);
 
       const parkData = amenities.parks.map((p) => [
         p.name || "N/A",
         `${p.distance || 0} km`,
-        `🚶 ${p.walking_time || 0} min`,
-        `🚗 ${p.driving_time || 0} min`,
+        `Walk: ${p.walkingTime || p.walking_time || 0} min`,
+        `Drive: ${p.drivingTime || p.driving_time || 0} min`,
       ]);
 
       doc.autoTable({
@@ -427,13 +473,23 @@ class PDFService {
 
     // Lightning Risk
     if (lightningRisk) {
-      yPos = this.addSubsectionTitle(doc, "⚡ Lightning Risk Assessment", yPos);
+      yPos = this.addSubsectionTitle(doc, "Lightning Risk Assessment", yPos);
 
       const lightningData = [
-        ["Risk Level", lightningRisk.level],
-        ["Probability", `${lightningRisk.probability}%`],
-        ["Recommendation", lightningRisk.recommendation],
+        ["Risk Level", lightningRisk.level || lightningRisk.riskLevel || "Low"],
+        ["Annual Probability", `${lightningRisk.probability || 0}%`],
+        ["Recommendation", lightningRisk.recommendation || lightningRisk.warning || "Standard protection"],
       ];
+      
+      // Add lightning density if available
+      if (lightningRisk.lightningDensity) {
+        lightningData.push(["Lightning Density", `${lightningRisk.lightningDensity} flashes/km²/year`]);
+      }
+      
+      // Add building type
+      if (lightningRisk.buildingType) {
+        lightningData.push(["Building Type", lightningRisk.buildingType]);
+      }
 
       doc.autoTable({
         startY: yPos,
@@ -449,7 +505,97 @@ class PDFService {
         margin: { left: margin, right: margin },
       });
 
-      yPos = doc.lastAutoTable.finalY + 15;
+      yPos = doc.lastAutoTable.finalY + 10;
+      
+      // Add warnings if available
+      if (lightningRisk.warnings && lightningRisk.warnings.length > 0) {
+        doc.setFontSize(9);
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(180, 83, 9); // Orange
+        doc.text("Warnings:", margin, yPos);
+        yPos += 5;
+        
+        doc.setFont(undefined, "normal");
+        doc.setTextColor(0, 0, 0);
+        lightningRisk.warnings.forEach((warning) => {
+          doc.text(`• ${warning}`, margin + 5, yPos, { maxWidth: contentWidth - 5 });
+          yPos += 5;
+        });
+      }
+      
+      yPos += 10;
+    }
+
+    // Flood Risk Assessment
+    if (floodRisk && floodRisk.current) {
+      // Check if we need a new page
+      if (yPos > pageHeight - 100) {
+        doc.addPage();
+        yPos = margin;
+      }
+
+      yPos = this.addSubsectionTitle(doc, "Flood Risk Assessment", yPos);
+
+      const inchesToMeters = (inches) => (inches * 0.0254).toFixed(2);
+
+      const floodData = [
+        ["Risk Level", floodRisk.current.riskLevel || "Low"],
+        ["Risk Score", `${floodRisk.current.riskScore || 0}/100`],
+        [
+          "Potential Depth",
+          `${floodRisk.current.depthInches || 0} inches (${inchesToMeters(floodRisk.current.depthInches || 0)} meters)`,
+        ],
+        ["Description", floodRisk.current.description || "Minimal risk"],
+      ];
+
+      doc.autoTable({
+        startY: yPos,
+        head: [["Aspect", "Details"]],
+        body: floodData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [59, 130, 246],
+          fontSize: 10,
+          fontStyle: "bold",
+        }, // Blue
+        bodyStyles: { fontSize: 9 },
+        margin: { left: margin, right: margin },
+      });
+
+      yPos = doc.lastAutoTable.finalY + 10;
+
+      // Future projections
+      if (floodRisk.future && floodRisk.future.length > 0) {
+        doc.setFontSize(9);
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(0, 0, 0);
+        doc.text("Future Climate Projections:", margin, yPos);
+        yPos += 7;
+
+        const futureData = floodRisk.future.map((proj) => [
+          proj.year || "Unknown",
+          proj.riskLevel || "Low",
+          `${proj.depthInches || 0} inches (${inchesToMeters(proj.depthInches || 0)} meters)`,
+          `${proj.riskScore || 0}/100`,
+        ]);
+
+        doc.autoTable({
+          startY: yPos,
+          head: [["Timeframe", "Risk Level", "Potential Depth", "Score"]],
+          body: futureData,
+          theme: "striped",
+          headStyles: {
+            fillColor: [14, 165, 233],
+            fontSize: 9,
+            fontStyle: "bold",
+          },
+          bodyStyles: { fontSize: 8 },
+          alternateRowStyles: { fillColor: [240, 249, 255] },
+          margin: { left: margin, right: margin },
+        });
+
+        yPos = doc.lastAutoTable.finalY + 15;
+      }
     }
 
     // ==================== PAGE 6: DEVELOPMENT SCENARIOS ====================
@@ -503,7 +649,7 @@ class PDFService {
         [
           "Estimated Cost",
           scenario.estimatedCost
-            ? `Rs. ${(scenario.estimatedCost / 10000000).toFixed(2)} Crores`
+            ? `${currencySymbol} ${formatNumber(scenario.estimatedCost)}`
             : "N/A",
         ],
         ["Expected ROI", scenario.roi || "N/A"],
@@ -579,7 +725,7 @@ class PDFService {
   }
 
   // Helper Methods
-  addCoverPage(doc, pageWidth, pageHeight, primaryColor) {
+  addCoverPage(doc, pageWidth, pageHeight, primaryColor, cityName = "Bangalore") {
     // Background gradient effect
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(0, 0, pageWidth, pageHeight / 2, "F");
@@ -596,7 +742,7 @@ class PDFService {
 
     doc.setFontSize(14);
     doc.setFont(undefined, "normal");
-    doc.text("ML-Powered Comprehensive Analysis", pageWidth / 2, 90, {
+    doc.text(`ML-Powered Analysis • ${cityName}`, pageWidth / 2, 90, {
       align: "center",
     });
 

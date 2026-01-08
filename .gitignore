@@ -247,6 +247,7 @@ backend/models/*.pt
 backend/models/*.keras
 backend/models/*.joblib
 backend/training_data/
+backend/requirements.txt
 *.model
 *.weights
 *.ckpt
@@ -343,3 +344,4 @@ cypress/screenshots/
 # ============================================
 .eslintignore
 .prettierignore
+

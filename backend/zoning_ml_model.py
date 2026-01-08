@@ -163,10 +163,10 @@ class ZoningMLModel:
             # Return rule-based predictions if model not trained
             return self._rule_based_prediction(features)
         
-        # Prepare feature vector
-        feature_vector = [features[name] for name in self.feature_names]
-        feature_vector = np.array([feature_vector])
-        feature_vector_scaled = self.scaler.transform(feature_vector)
+        # Prepare feature vector with DataFrame to preserve names
+        feature_dict = {name: features[name] for name in self.feature_names}
+        feature_df = pd.DataFrame([feature_dict])
+        feature_vector_scaled = self.scaler.transform(feature_df)
         
         # Predict zone type
         zone_type = self.classifier.predict(feature_vector_scaled)[0]
@@ -185,8 +185,13 @@ class ZoningMLModel:
             'model_version': self.model_version
         }
     
-    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None, area=None, flood_risk=None):
+    def generate_comprehensive_report(self, polygon, nearby_areas, amenities=None, aqi_forecast=None, lightning_risk=None, road_condition=None, area=None, flood_risk=None, city='bangalore'):
         """Generate full ML-powered report"""
+        from city_config import get_city_config
+        
+        # Get city configuration
+        city_config = get_city_config(city)
+        
         # Extract features
         features = self.extract_features(polygon, nearby_areas)
         
@@ -204,8 +209,13 @@ class ZoningMLModel:
         centroid = self._get_centroid(polygon)
         perimeter = self._calculate_perimeter(polygon)
         
-        # Price analysis
-        avg_price = features.get('avg_nearby_value', 8500)
+        # Price analysis - adjusted for city
+        base_price = features.get('avg_nearby_value', 8500)  # Base price in INR per sqft
+        price_multiplier = city_config.get('price_multiplier', 1.0)
+        
+        # Adjust price for city (convert to local currency)
+        avg_price = base_price * price_multiplier
+        
         price_range = {
             'min': int(avg_price * 0.85),
             'max': int(avg_price * 1.15),
@@ -219,8 +229,8 @@ class ZoningMLModel:
         # Buildability score
         buildability = self._calculate_buildability(predictions['attributes'], area, amenities)
         
-        # Development scenarios
-        scenarios = self._generate_scenarios(area, predictions['attributes'])
+        # Development scenarios - pass city for proper currency
+        scenarios = self._generate_scenarios(area, predictions['attributes'], city=city)
         
         # Recommendations
         recommendations = self._generate_recommendations(
@@ -246,7 +256,8 @@ class ZoningMLModel:
                 'area': int(area),
                 'perimeter': int(perimeter),
                 'centroid': centroid,
-                'coordinates': polygon
+                'coordinates': polygon,
+                'address': 'Address will be fetched by frontend'  # Placeholder
             },
             'pricing': {
                 'pricePerSqft': price_range,
@@ -429,16 +440,18 @@ class ZoningMLModel:
     
     def _find_amenities(self, centroid):
         """Find nearby amenities (simulated)"""
+        metro_data = [
+            {'name': 'Indiranagar Metro Station', 'distance': 1.5, 'line': 'Purple Line'},
+            {'name': 'Trinity Metro Station', 'distance': 2.8, 'line': 'Green Line'}
+        ]
         return {
             'schools': [
                 {'name': 'Delhi Public School', 'distance': 1.2, 'rating': 4.5},
                 {'name': 'Manipal International School', 'distance': 2.3, 'rating': 4.3},
                 {'name': 'National Public School', 'distance': 3.1, 'rating': 4.6}
             ],
-            'metro': [
-                {'name': 'Indiranagar Metro Station', 'distance': 1.5, 'line': 'Purple Line'},
-                {'name': 'Trinity Metro Station', 'distance': 2.8, 'line': 'Green Line'}
-            ],
+            'metro': metro_data,
+            'transport': metro_data,  # Alias for compatibility with frontend
             'hospitals': [
                 {'name': 'Manipal Hospital', 'distance': 1.8, 'rating': 4.4},
                 {'name': 'Columbia Asia Hospital', 'distance': 2.5, 'rating': 4.2},
@@ -474,13 +487,19 @@ class ZoningMLModel:
             score += 10
             factors.append({'name': 'School Proximity', 'score': 10, 'status': 'good'})
         
-        min_metro = min([m['distance'] for m in amenities['metro']])
-        if min_metro < 2:
-            score += 20
-            factors.append({'name': 'Metro Access', 'score': 20, 'status': 'excellent'})
+        # Handle both 'metro' and 'transport' keys (frontend uses 'transport')
+        metro_stations = amenities.get('metro', amenities.get('transport', []))
+        if metro_stations and len(metro_stations) > 0:
+            min_metro = min([m['distance'] for m in metro_stations])
+            if min_metro < 2:
+                score += 20
+                factors.append({'name': 'Metro Access', 'score': 20, 'status': 'excellent'})
+            else:
+                score += 10
+                factors.append({'name': 'Metro Access', 'score': 10, 'status': 'good'})
         else:
-            score += 10
-            factors.append({'name': 'Metro Access', 'score': 10, 'status': 'good'})
+            score += 5
+            factors.append({'name': 'Metro Access', 'score': 5, 'status': 'limited'})
         
         avg_hospital_dist = np.mean([h['distance'] for h in amenities['hospitals']])
         if avg_hospital_dist < 3:
@@ -498,8 +517,14 @@ class ZoningMLModel:
             'factors': factors
         }
     
-    def _generate_scenarios(self, area, attributes):
+    def _generate_scenarios(self, area, attributes, city='bangalore'):
         """Generate development scenarios"""
+        from city_config import get_city_config
+        
+        # Get city configuration for cost adjustments
+        city_config = get_city_config(city)
+        cost_multiplier = city_config.get('price_multiplier', 1.0)
+        
         far_range = attributes['far'].split('-')
         far_max = float(far_range[1].strip())
         coverage_range = attributes['groundCoverage'].split('-')
@@ -548,6 +573,10 @@ class ZoningMLModel:
         moderate_built_area_sqft = moderate_built_area * 10.764
         max_built_area_sqft = max_built_area * 10.764
         
+        # Base construction cost in INR per sqm, then adjust for city
+        base_construction_cost = 35000  # INR per sqm
+        city_construction_cost = base_construction_cost * cost_multiplier
+        
         return [
             {
                 'name': 'Conservative',
@@ -556,7 +585,7 @@ class ZoningMLModel:
                 'floors': conservative_floors,
                 'builtArea': int(conservative_built_area_sqft),
                 'openSpace': int(area * 0.5 * 10.764),
-                'estimatedCost': int(conservative_built_area * 35000),
+                'estimatedCost': int(conservative_built_area * city_construction_cost),
                 'roi': '12-15%'
             },
             {
@@ -566,7 +595,7 @@ class ZoningMLModel:
                 'floors': moderate_floors,
                 'builtArea': int(moderate_built_area_sqft),
                 'openSpace': int(area * 0.35 * 10.764),
-                'estimatedCost': int(moderate_built_area * 35000),
+                'estimatedCost': int(moderate_built_area * city_construction_cost),
                 'roi': '15-18%'
             },
             {
@@ -576,7 +605,7 @@ class ZoningMLModel:
                 'floors': max_floors,
                 'builtArea': int(max_built_area_sqft),
                 'openSpace': int(area * 0.25 * 10.764),
-                'estimatedCost': int(max_built_area * 35000),
+                'estimatedCost': int(max_built_area * city_construction_cost),
                 'roi': '18-22%'
             }
         ]
@@ -592,7 +621,9 @@ class ZoningMLModel:
                 'description': 'This site shows strong indicators for development with good zoning compliance and amenity access.'
             })
         
-        if amenities['metro'][0]['distance'] < 1.5:
+        # Handle both 'metro' and 'transport' keys
+        metro_stations = amenities.get('metro', amenities.get('transport', []))
+        if metro_stations and len(metro_stations) > 0 and metro_stations[0]['distance'] < 1.5:
             recommendations.append({
                 'type': 'positive',
                 'title': 'Premium Metro Connectivity',

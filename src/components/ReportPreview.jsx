@@ -53,6 +53,46 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
   const currencySymbol =
     pricing?.currencySymbol || cityInfo?.currencySymbol || "₹";
   const cityName = cityInfo?.name || "Bangalore";
+  const cityId = cityInfo?.id || "bangalore";
+
+  // Helper function to format numbers based on city
+  const formatNumber = (num) => {
+    if (!num && num !== 0) return "0";
+    
+    // Check if city is Indian (uses lakhs/crores system)
+    const indianCities = ["bangalore", "mumbai", "delhi", "hyderabad"];
+    const isIndianCity = indianCities.includes(cityId.toLowerCase());
+    
+    if (isIndianCity) {
+      // Indian number system: last 3 digits, then groups of 2
+      return formatIndianNumber(num);
+    } else {
+      // International system: groups of 3
+      return num.toLocaleString("en-US");
+    }
+  };
+
+  const formatIndianNumber = (num) => {
+    const numStr = Math.round(num).toString();
+    if (numStr.length <= 3) return numStr;
+    
+    // Last 3 digits
+    let result = numStr.slice(-3);
+    let remaining = numStr.slice(0, -3);
+    
+    // Add commas every 2 digits from right
+    while (remaining.length > 0) {
+      if (remaining.length <= 2) {
+        result = remaining + ',' + result;
+        break;
+      } else {
+        result = remaining.slice(-2) + ',' + result;
+        remaining = remaining.slice(0, -2);
+      }
+    }
+    
+    return result;
+  };
 
   const aqiData = aqiForecast
     ? aqiForecast.map((val, idx) => ({
@@ -60,6 +100,15 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
         aqi: val,
       }))
     : [];
+
+  // Debug: Log AQI data
+  console.log("📊 AQI Forecast in ReportPreview:", {
+    hasAqiForecast: !!aqiForecast,
+    length: aqiForecast?.length,
+    sample: aqiForecast?.slice(0, 5),
+    min: aqiForecast ? Math.min(...aqiForecast) : null,
+    max: aqiForecast ? Math.max(...aqiForecast) : null,
+  });
 
   // Debug: Log flood data
   console.log("🌊 Flood data in report:", floodRisk);
@@ -98,7 +147,7 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
               <div
                 className={`w-6 rounded-t ${color}`}
                 style={{ height: `${h}px` }}
-                title={`${f.year}: ${f.depthInches}"`}
+                title={`${f.year}: ${f.depthInches} inches (${(inchesToMeters(f.depthInches)).toFixed(2)}m)`}
               />
               <div className="mt-1 text-xxs text-slate-500">
                 {f.year.replace("+", "")}
@@ -253,15 +302,11 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                     Estimated Value
                   </p>
                   <div className="text-3xl font-bold text-blue-600 mb-1">
-                    {currencySymbol}
-                    {(pricing.estimatedValue.average / 10000000).toFixed(
-                      2
-                    )}{" "}
-                    {currencySymbol === "₹" ? "Cr" : "M"}
+                    {currencySymbol}{formatNumber(pricing.estimatedValue.average)}
                   </div>
                   <p className="text-xs text-blue-600 font-medium mb-2">
                     {currencySymbol}
-                    {pricing.pricePerSqft.average.toLocaleString()}/sqft
+                    {formatNumber(pricing.pricePerSqft.average)}/sqft
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded-full w-fit">
                     <TrendingUp className="w-3 h-3" />
@@ -298,6 +343,23 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                 Parcel Information
               </h3>
               <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-5 border border-slate-200 shadow-sm">
+                {/* Address */}
+                {parcelInfo.address && (
+                  <div className="bg-white rounded-lg p-3 border border-slate-200 mb-4 hover:border-emerald-300 hover:shadow-md transition-all">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600 uppercase mb-1">
+                          Address
+                        </p>
+                        <p className="text-sm font-medium text-slate-800">
+                          {parcelInfo.address}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg p-3 border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all">
                     <div className="flex items-center gap-2 mb-2">
@@ -307,11 +369,11 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                       </p>
                     </div>
                     <p className="text-xl font-bold text-slate-800">
-                      {Math.round(parcelInfo.area * 10.764).toLocaleString()}
+                      {formatNumber(Math.round(parcelInfo.area * 10.764))}
                     </p>
                     <p className="text-xs text-slate-500">sqft</p>
                     <p className="text-xs text-slate-400 mt-1">
-                      {parcelInfo.area.toLocaleString()} m²
+                      {formatNumber(parcelInfo.area)} m²
                     </p>
                   </div>
                   <div className="bg-white rounded-lg p-3 border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all">
@@ -322,13 +384,11 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                       </p>
                     </div>
                     <p className="text-xl font-bold text-slate-800">
-                      {Math.round(
-                        parcelInfo.perimeter * 3.281
-                      ).toLocaleString()}
+                      {formatNumber(Math.round(parcelInfo.perimeter * 3.281))}
                     </p>
                     <p className="text-xs text-slate-500">ft</p>
                     <p className="text-xs text-slate-400 mt-1">
-                      {parcelInfo.perimeter.toLocaleString()} m
+                      {formatNumber(Math.round(parcelInfo.perimeter))} m
                     </p>
                   </div>
                   <div className="bg-emerald-50 rounded-lg p-2.5 border border-emerald-200">
@@ -415,11 +475,7 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                             Est. Cost
                           </span>
                           <span className="text-sm font-bold text-slate-800">
-                            {currencySymbol}
-                            {(scenario.estimatedCost / 10000000).toFixed(
-                              2
-                            )}{" "}
-                            {currencySymbol === "₹" ? "Cr" : "M"}
+                            {currencySymbol}{formatNumber(scenario.estimatedCost)}
                           </span>
                         </div>
                       )}
@@ -429,7 +485,7 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                             Open Space
                           </span>
                           <span className="text-sm font-bold text-slate-800">
-                            {scenario.openSpace.toLocaleString()}{" "}
+                            {formatNumber(scenario.openSpace)}{" "}
                             <span className="text-xs font-normal text-slate-500">
                               sqft
                             </span>
@@ -524,11 +580,11 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                     </p>
                   </div>
                   <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                    <p className="text-xs text-emerald-700 mb-1">Peak Hour</p>
+                    <p className="text-xs text-emerald-700 mb-1">Peak Hour Trips</p>
                     <p className="text-xl font-bold text-slate-800">
                       {traffic.peakHourTrips.toLocaleString()}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">AM/PM Peak</p>
+                    <p className="text-xs text-slate-500 mt-1">4-5 PM & 8-9 AM</p>
                   </div>
                   <div className="col-span-2 bg-emerald-50 p-3 rounded-xl border border-emerald-200">
                     <p className="text-xs text-emerald-700 mb-2">
@@ -771,12 +827,14 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                       Lightning Strike Risk
                     </h4>
                   </div>
-                  <div className="text-center py-4">
+                  <div className="text-center py-4 px-3">
                     <div
                       className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-3 ${
-                        lightningRisk?.riskLevel === "High"
+                        lightningRisk?.level === "Very High" || lightningRisk?.riskLevel === "Very High"
                           ? "bg-red-100 text-red-600"
-                          : lightningRisk?.riskLevel === "Medium"
+                          : lightningRisk?.level === "High" || lightningRisk?.riskLevel === "High"
+                          ? "bg-orange-100 text-orange-600"
+                          : lightningRisk?.level === "Medium" || lightningRisk?.riskLevel === "Medium"
                           ? "bg-amber-100 text-amber-600"
                           : "bg-emerald-100 text-emerald-600"
                       }`}
@@ -784,12 +842,32 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                       <Zap className="w-8 h-8" />
                     </div>
                     <h5 className="text-xl font-bold text-slate-800 mb-2">
-                      {lightningRisk?.riskLevel || "Low"} Risk
+                      {lightningRisk?.level || lightningRisk?.riskLevel || "Low"} Risk
                     </h5>
-                    <p className="text-xs text-slate-600">
-                      {lightningRisk?.warning ||
-                        "Standard lightning protection recommended."}
+                    
+                    {lightningRisk?.probability !== undefined && (
+                      <div className="bg-yellow-50 rounded-lg p-2 mb-3">
+                        <p className="text-xs text-slate-600 mb-1">Annual Strike Probability</p>
+                        <p className="text-2xl font-bold text-yellow-700">{lightningRisk.probability}%</p>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-slate-600 mb-3">
+                      {lightningRisk?.recommendation || 
+                       lightningRisk?.warning ||
+                       "Standard lightning protection recommended."}
                     </p>
+                    
+                    {lightningRisk?.warnings && lightningRisk.warnings.length > 0 && (
+                      <div className="text-left space-y-1">
+                        {lightningRisk.warnings.map((warning, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-xs text-slate-600">
+                            <AlertCircle className="w-3 h-3 text-yellow-600 mt-0.5 flex-shrink-0" />
+                            <span>{warning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -858,7 +936,10 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                             Potential Depth
                           </p>
                           <p className="text-lg font-bold text-blue-600">
-                            {floodRisk.current?.depthInches || 0}"
+                            {floodRisk.current?.depthInches || 0} inches
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            ({(inchesToMeters(floodRisk.current?.depthInches || 0)).toFixed(2)} meters)
                           </p>
                         </div>
                         <div className="bg-cyan-50 p-3 rounded-lg text-center">
@@ -903,7 +984,7 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                                     {projection.riskLevel} Risk
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    Depth: {projection.depthInches}"
+                                    Depth: {projection.depthInches} inches ({(inchesToMeters(projection.depthInches)).toFixed(2)}m)
                                   </p>
                                 </div>
                               </div>

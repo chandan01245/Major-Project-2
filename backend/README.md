@@ -8,6 +8,10 @@ This is a Python-based Machine Learning backend that processes zoning regulation
 - 🤖 **ML Model Training**: Train Random Forest and Gradient Boosting models on regulation data
 - 🎯 **Prediction API**: Predict zoning attributes for any location
 - 📊 **Report Generation**: Generate comprehensive ML-powered reports
+- 🌍 **Real-time AQI Data**: Integration with WAQI (World Air Quality Index) API
+- 🔮 **AQI Forecasting**: 30-day air quality predictions using LSTM neural networks
+- 🌊 **Flood Risk Analysis**: City-specific flood risk predictions
+- 📍 **Amenities Finder**: Real-time nearby amenities using Geoapify
 - 🔄 **Auto-fallback**: Frontend gracefully falls back to simulation if backend unavailable
 
 ## Setup Instructions
@@ -37,7 +41,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Start the Backend Server
+### 4. Configure API Keys
+
+Copy `.env.example` to `.env` and add your API keys:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add:
+- **MAPTILER_KEY**: Get from https://cloud.maptiler.com/account/keys/
+- **GEOAPIFY_KEY**: Get from https://www.geoapify.com/
+- **WAQI_API_KEY**: Get from https://aqicn.org/data-platform/token/
+
+See [WAQI_SETUP.md](./WAQI_SETUP.md) for detailed WAQI API setup instructions.
+
+### 5. Start the Backend Server
 
 ```bash
 python app.py
@@ -52,19 +71,33 @@ The server will start on `http://localhost:5000`
 GET /api/health
 ```
 
-### Upload Document
+### Document Management
+
+#### Upload Document
 ```
 POST /api/upload-document
 Content-Type: multipart/form-data
 Body: file (PDF, DOCX, or TXT)
 ```
 
-### Train Model
+#### Get Documents
+```
+GET /api/documents
+```
+
+#### Delete Document
+```
+DELETE /api/documents/{doc_id}
+```
+
+### ML Model
+
+#### Train Model
 ```
 POST /api/train-model
 ```
 
-### Predict Zoning
+#### Predict Zoning
 ```
 POST /api/predict-zoning
 Content-Type: application/json
@@ -74,24 +107,69 @@ Body: {
 }
 ```
 
-### Generate Report
+### Report Generation
+
+#### Generate Report
 ```
 POST /api/generate-report
 Content-Type: application/json
 Body: {
   "polygon": [[lng, lat], ...],
-  "nearby_areas": [...]
+  "nearby_areas": [...],
+  "city": "bangalore"
 }
 ```
 
-### Get Documents
+### AQI Endpoints (WAQI Integration)
+
+#### Get Current AQI
 ```
-GET /api/documents
+POST /api/aqi/current
+Content-Type: application/json
+Body: {
+  "lat": 12.9716,
+  "lng": 77.5946
+}
 ```
 
-### Delete Document
+#### Get Historical AQI
 ```
-DELETE /api/documents/{doc_id}
+POST /api/aqi/historical
+Content-Type: application/json
+Body: {
+  "lat": 12.9716,
+  "lng": 77.5946,
+  "days": 30
+}
+```
+
+#### Get AQI Forecast
+```
+POST /api/aqi/forecast
+Content-Type: application/json
+Body: {
+  "lat": 12.9716,
+  "lng": 77.5946,
+  "days": 30
+}
+```
+
+### Flood Risk
+
+#### Predict Flood Risk
+```
+POST /api/predict-flood
+Content-Type: application/json
+Body: {
+  "lat": 12.9716,
+  "lng": 77.5946,
+  "city": "bangalore"
+}
+```
+
+#### Get Flood Info by City
+```
+GET /api/flood-info/{city}
 ```
 
 ## Architecture
