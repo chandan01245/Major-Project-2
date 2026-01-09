@@ -3,7 +3,14 @@ import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-load_dotenv()
+# Calculate paths
+current_dir = os.path.dirname(os.path.abspath(__file__)) # backend/services
+backend_dir = os.path.dirname(current_dir) # backend
+project_root = os.path.dirname(backend_dir) # root
+
+# Load .env explicitly from both locations
+load_dotenv(os.path.join(backend_dir, '.env'))
+load_dotenv(os.path.join(project_root, '.env'))
 
 class WAQIService:
     """Service to fetch AQI data from World Air Quality Index API"""
@@ -65,7 +72,7 @@ class WAQIService:
             print(f"❌ Unexpected error in WAQI service: {e}")
             return None
     
-    def get_historical_data(self, lat, lng, days=400):
+    def get_historical_data(self, lat, lng, days=400, city_name=None):
         """
         Get historical AQI data for a location
         WAQI API provides station-based historical data
@@ -74,43 +81,105 @@ class WAQIService:
         This allows the model to comparing "today" with "this day last year".
         """
         if not self.api_key:
-            print("⚠️ WAQI_API_KEY not set in .env file")
+            print("⚠️ WAQI_API_KEY not set in .env file", flush=True)
             return []
         
+        current_aqi = 100 # Default if everything fails
+        
         try:
-            # First, get the station for these coordinates
+            # 1. First, get the station for these coordinates
             station_url = f"{self.base_url}/feed/geo:{lat};{lng}/"
             params = {'token': self.api_key}
             
             response = requests.get(station_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
+            print("Data",data)
             
-            if data.get('status') != 'ok':
-                print(f"⚠️ Could not get station info: {data.get('status')}")
-                return self._generate_synthetic_history(data.get('data', {}).get('aqi', 100), days)
+            station_id = None
+            if data.get('status') == 'ok':
+                station_id = data.get('data', {}).get('idx')
+                current_aqi = data.get('data', {}).get('aqi', 100)
             
-            station_id = data.get('data', {}).get('idx')
-            current_aqi = data.get('data', {}).get('aqi', 100)
-            
-            if not station_id:
-                print("⚠️ No station ID found")
-                return self._generate_synthetic_history(current_aqi, days)
-            
-            # Get historical data from the station
-            history_url = f"{self.base_url}/feed/@{station_id}/obs.en.json"
-            
-            response = requests.get(history_url, params=params, timeout=10)
-            response.raise_for_status()
-            history_data = response.json()
-            
-            if history_data.get('status') != 'ok':
-                print(f"ℹ️  Historical data not available from station, generating synthetic data")
-                return self._generate_synthetic_history(current_aqi, days)
-            
-            # Parse historical observations
             historical_values = []
-            observations = history_data.get('data', [])
+            
+            # 2. Try to get history from the primary station
+            if station_id:
+                print(f"🎯 Found local station {station_id} for coordinates.", flush=True)
+                historical_values = self._fetch_station_history(station_id, days)
+                
+            # 3. If primary station has no history, try city-wide search
+            if not historical_values and city_name:
+                print(f"⚠️ Primary station has no history. Attempting city-wide search for: {city_name}", flush=True)
+                search_url = f"{self.base_url}/search/"
+                search_params = {'token': self.api_key, 'keyword': city_name}
+                
+                search_res = requests.get(search_url, params=search_params, timeout=10)
+                if search_res.ok:
+                    search_data = search_res.json()
+                    if search_data.get('status') == 'ok' and search_data.get('data'):
+                        # Try the first few stations to find one with full history
+                        for result in search_data['data'][:3]:
+                            alt_station_id = result.get('uid')
+                            if alt_station_id and alt_station_id != station_id:
+                                print(f"🔍 Checking alternative station {alt_station_id}: {result.get('station', {}).get('name')}", flush=True)
+                                alt_history = self._fetch_station_history(alt_station_id, days)
+                                if len(alt_history) > 45:
+                                    historical_values = alt_history
+                                    print(f"✅ Found substitution history from station {alt_station_id}!", flush=True)
+                                    break
+            
+            # 4. Final Validation
+            if not historical_values:
+                print(f"ℹ️  No real history found (Local or City). Generating synthetic.", flush=True)
+                return self._generate_synthetic_history(current_aqi, days)
+            
+            # Ensure we have enough data (min 45 points for LSTM)
+            if len(historical_values) < 45:
+                print(f"ℹ️  Insufficent real points ({len(historical_values)}). Using synthetic.", flush=True)
+                return self._generate_synthetic_history(current_aqi, days)
+            
+            # Limit to requested days (Most Recent)
+            if len(historical_values) > days:
+                historical_values = historical_values[-days:]
+
+            print(f"✅ WAQI: Successfully retrieved {len(historical_values)} REAL historical data points.", flush=True)
+            print(f"   Date Range: {historical_values[0]['date']} to {historical_values[-1]['date']}", flush=True)
+            return historical_values
+            
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ WAQI Error: {e}", flush=True)
+            return self._generate_synthetic_history(current_aqi, days)
+        except Exception as e:
+            print(f"⚠️ Unexpected error getting historical data: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return self._generate_synthetic_history(current_aqi, days)
+
+    def _fetch_station_history(self, station_id, days):
+        """Helper to fetch history from a specific station ID"""
+        try:
+            url = f"{self.base_url}/feed/@{station_id}/obs.en.json"
+            response = requests.get(url, params={'token': self.api_key}, timeout=10)
+            
+            if not response.ok: return []
+            
+            data = response.json()
+            if data.get('status') != 'ok': return []
+            
+            historical_values = []
+            observations = data.get('data', [])
+            
+            # Parse observations
+            # Note: WAQI history format is sometimes {'city': { ... 'iaqi': [...] }} or just 'iaqi' list
+            # We look for a list of daily averages
+            
+            # Use specific handling for 'obs.en.json' structure if distinct, 
+            # currently assuming it returns a list under 'data' like the main feed?? 
+            # Actually, standard feed/@id/ doesn't always give full history.
+            # However, for this project we seem to be relying on 'iaqi' or 'forecast' or 'msg'.
+            # Wait, the previous code used: history_data.get('data', []) 
+            # and iterated over it looking for 'v' -> 'aqi'.
             
             for obs in observations:
                 if isinstance(obs, dict) and 'v' in obs:
@@ -121,40 +190,10 @@ class WAQIService:
                             'aqi': aqi_value
                         })
             
-            if not historical_values:
-                print(f"ℹ️  No historical data points found, generating synthetic data")
-                return self._generate_synthetic_history(current_aqi, days)
-            
-            # Sort by date (oldest first)
             historical_values.sort(key=lambda x: x.get('date', ''))
-            
-            # Limit to requested days
-            # We want the MOST RECENT 400 days to capture the past year
-            if len(historical_values) > days:
-                historical_values = historical_values[-days:]
-            
-            # If we have very little data (e.g. new station), fallback to synthetic
-            # The model needs at least ~45 days to run a sequence
-            if len(historical_values) < 45:
-                print(f"ℹ️  WAQI: Insufficient real data ({len(historical_values)} pts). Minimum 45 needed for LSTM. Supplementing with synthetic.")
-                return self._generate_synthetic_history(current_aqi, days)
-
-            print(f"✅ WAQI: Successfully retrieved {len(historical_values)} REAL historical data points from station {station_id}", flush=True)
-            print(f"   Date Range: {historical_values[0]['date']} to {historical_values[-1]['date']}", flush=True)
             return historical_values
-            
-        except requests.exceptions.RequestException as e:
-            print(f"⚠️ WAQI Error: {e}")
-            # Try to get current AQI and generate synthetic data
-            try:
-                current_data = self.get_current_aqi(lat, lng)
-                if current_data:
-                    return self._generate_synthetic_history(current_data['aqi'], days)
-            except:
-                pass
-            return []
         except Exception as e:
-            print(f"⚠️ Unexpected error getting historical data: {e}")
+            print(f"   Error fetching history for {station_id}: {e}", flush=True)
             return []
     
     def _generate_synthetic_history(self, current_aqi, days=400):

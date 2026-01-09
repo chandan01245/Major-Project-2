@@ -3,11 +3,39 @@ import sys
 from datetime import datetime
 import threading
 
+# Add backend directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 # Fix Unicode encoding for Windows console
 if sys.platform == 'win32':
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+# Load environment variables before other imports
+from dotenv import load_dotenv
+import logging
+
+# Setup basic logging to see environment loading status
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Calculate paths
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.dirname(current_dir)
+project_root = os.path.dirname(backend_dir)
+
+# Try loading .env from backend directory first
+backend_env_path = os.path.join(backend_dir, '.env')
+if os.path.exists(backend_env_path):
+    load_dotenv(backend_env_path)
+    logger.info(f"Loaded environment from {backend_env_path}")
+
+# Try loading .env from project root
+root_env_path = os.path.join(project_root, '.env')
+if os.path.exists(root_env_path):
+    load_dotenv(root_env_path)
+    logger.info(f"Loaded environment from {root_env_path}")
 
 from models.document_processor_improved import ImprovedDocumentProcessor as DocumentProcessor
 from flask import Flask, jsonify, request, send_from_directory
@@ -28,14 +56,11 @@ status_lock = threading.Lock()
 # Initialize new services
 from services.amenities_service import AmenitiesFinder
 from models.aqi_model import AQIPredictor
-from dotenv import load_dotenv
 from models.flood_model import FloodPredictor
 from services.waqi_service import WAQIService
 from services.geocoding_service import GeocodingService
 from core.city_config import get_city_config, format_currency, format_number
 from services.location_validator import validate_location_for_development
-
-load_dotenv() # Load environment variables
 
 amenities_finder = AmenitiesFinder()
 aqi_predictor = AQIPredictor()
@@ -306,7 +331,7 @@ def generate_report():
             # Get historical data for better predictions
             # Request 400 days to allow the model to learn annual seasonality (Winter vs Monsoon)
             print("⏳ Step 2: Fetching 400 days of historical AQI data from WAQI service...", flush=True)
-            historical_aqi = waqi_service.get_historical_data(centroid_lat, centroid_lng, days=400)
+            historical_aqi = waqi_service.get_historical_data(centroid_lat, centroid_lng, days=400, city_name=city)
             
             if historical_aqi:
                 print(f"✅ Step 3: Retrieved {len(historical_aqi)} historical AQI values. REAL DATA confirmed.", flush=True)

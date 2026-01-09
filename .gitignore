@@ -249,6 +249,7 @@ backend/models/*.joblib
 backend/training_data/
 backend/requirements.txt
 backend/saved_models
+backend/models/saved_models
 *.model
 *.weights
 *.ckpt

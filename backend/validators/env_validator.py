@@ -25,8 +25,13 @@ def validate_environment(required_vars=None, optional_vars=None, strict=False):
     Returns:
         Dict of validation results
     """
-    # Load .env file
-    load_dotenv()
+    # Load .env file explicitly
+    current_dir = os.path.dirname(os.path.abspath(__file__)) # backend/validators
+    backend_dir = os.path.dirname(current_dir) # backend
+    project_root = os.path.dirname(backend_dir) # root
+
+    load_dotenv(os.path.join(backend_dir, '.env'))
+    load_dotenv(os.path.join(project_root, '.env'))
     
     results = {
         'valid': True,
