@@ -55,6 +55,8 @@ const IndianUrbanForm = () => {
   const [cityZones, setCityZones] = useState([]);
   const [showZoneOverlays, setShowZoneOverlays] = useState(false);
   const [showZoningModal, setShowZoningModal] = useState(false);
+  const [showOceanErrorModal, setShowOceanErrorModal] = useState(false);
+  const [oceanErrorDetails, setOceanErrorDetails] = useState(null);
   const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
   const [isLoading3D, setIsLoading3D] = useState(false);
   const [show3DView, setShow3DView] = useState(false);
@@ -724,8 +726,8 @@ const IndianUrbanForm = () => {
       
       if (!validation.isValid) {
         setIsLoading3D(false);
-        const errorMsg = getLocationErrorMessage(validation);
-        alert(`❌ Invalid Location\n\n${errorMsg}\n\nPlease select a land area for development.`);
+        setOceanErrorDetails(validation);
+        setShowOceanErrorModal(true);
         
         // Remove the drawn polygon
         if (drawRef.current) {
@@ -944,8 +946,8 @@ const IndianUrbanForm = () => {
       });
       
       if (!validation.isValid) {
-        const errorMsg = getLocationErrorMessage(validation);
-        alert(`❌ Cannot Generate Report\n\n${errorMsg}\n\nPlease select a land area.`);
+        setOceanErrorDetails(validation);
+        setShowOceanErrorModal(true);
         setIsGeneratingReport(false);
         return;
       }
@@ -1822,6 +1824,80 @@ const IndianUrbanForm = () => {
                   Clear
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Ocean Validation Error Modal */}
+        {showOceanErrorModal && oceanErrorDetails && (
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl transform scale-100 transition-transform">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Invalid Location
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowOceanErrorModal(false)}
+                  className="p-1 hover:bg-slate-100 rounded-full"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="bg-red-50 p-4 rounded-xl mb-4">
+                <p className="text-sm font-semibold text-red-900 mb-2">
+                  {getLocationErrorMessage(oceanErrorDetails)}
+                </p>
+                
+                {oceanErrorDetails.ocean_check?.percentage_ocean && (
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-red-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">Water Coverage:</span>
+                      <span className="font-bold text-red-700">
+                        {oceanErrorDetails.ocean_check.percentage_ocean.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="mt-2 w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-red-500 h-full rounded-full transition-all"
+                        style={{ width: `${oceanErrorDetails.ocean_check.percentage_ocean}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {oceanErrorDetails.ocean_check?.ocean_points !== undefined && (
+                  <p className="text-xs text-red-700 mt-2">
+                    {oceanErrorDetails.ocean_check.ocean_points} out of {oceanErrorDetails.ocean_check.total_points} sample points are over water
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-xl mb-4 flex items-start gap-3">
+                <div className="p-1 bg-blue-100 rounded-full flex-shrink-0">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-blue-900">
+                    Please select a land area
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Urban development reports can only be generated for locations on solid ground. Try selecting an area on land instead.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowOceanErrorModal(false)}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                Got it, I'll try again
+              </button>
             </div>
           </div>
         )}
