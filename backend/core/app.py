@@ -9,10 +9,10 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-from document_processor_improved import ImprovedDocumentProcessor as DocumentProcessor
+from models.document_processor_improved import ImprovedDocumentProcessor as DocumentProcessor
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from zoning_ml_model import ZoningMLModel
+from models.zoning_ml_model import ZoningMLModel
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
@@ -26,14 +26,14 @@ processing_status = {}
 status_lock = threading.Lock()
 
 # Initialize new services
-from amenities_service import AmenitiesFinder
-from aqi_model import AQIPredictor
+from services.amenities_service import AmenitiesFinder
+from models.aqi_model import AQIPredictor
 from dotenv import load_dotenv
-from flood_model import FloodPredictor
-from waqi_service import WAQIService
-from geocoding_service import GeocodingService
-from city_config import get_city_config, format_currency, format_number
-from location_validator import validate_location_for_development
+from models.flood_model import FloodPredictor
+from services.waqi_service import WAQIService
+from services.geocoding_service import GeocodingService
+from core.city_config import get_city_config, format_currency, format_number
+from services.location_validator import validate_location_for_development
 
 load_dotenv() # Load environment variables
 
