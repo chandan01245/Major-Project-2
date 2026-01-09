@@ -1,115 +1,228 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from datetime import datetime, timedelta
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import MinMaxScaler
+import joblib
 import random
 import math
+import os
+from tensorflow.keras.models import load_model
 
 class AQIPredictor:
     def __init__(self):
-        self.model = None
+        self.lstm_model = None
+        self.rf_model = None
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.sequence_length = 30  # Look back 30 days
         self.is_trained = False
-        self.sequence_length = 10  # Days of history to look at
+        self.lstm_weight = 0.6
+        self.rf_weight = 0.4
+        
+        # Setup storage directory
+        self.models_dir = os.path.join(os.path.dirname(__file__), 'saved_models')
+        if not os.path.exists(self.models_dir):
+            os.makedirs(self.models_dir)
 
-    def build_model(self):
-        """Build LSTM model"""
+    def _prepare_data(self, data):
+        """
+        Convert time series list into X, y samples
+        """
+        X_lstm, X_rf, y = [], [], []
+        
+        # We need at least sequence_length + 1 data points
+        if len(data) <= self.sequence_length:
+            return np.array([]), np.array([]), np.array([])
+
+        # Normalize data for LSTM
+        data_reshaped = np.array(data).reshape(-1, 1)
+        scaled_data = self.scaler.fit_transform(data_reshaped)
+        
+        for i in range(len(data) - self.sequence_length):
+            # Input sequence (0 to 30)
+            seq_scaled = scaled_data[i:(i + self.sequence_length), 0]
+            seq_raw = data[i:(i + self.sequence_length)]
+            
+            # Target (31st day)
+            target_scaled = scaled_data[i + self.sequence_length, 0]
+            
+            X_lstm.append(seq_scaled)
+            X_rf.append(seq_raw) # RF works better with raw value patterns usually, or flattened
+            y.append(target_scaled)
+
+        # Reshape for LSTM: (samples, time_steps, features)
+        X_lstm = np.array(X_lstm)
+        X_lstm = np.reshape(X_lstm, (X_lstm.shape[0], X_lstm.shape[1], 1))
+        
+        # Reshape for RF: (samples, features)
+        X_rf = np.array(X_rf)
+        
+        return X_lstm, X_rf, np.array(y)
+
+    def build_lstm_model(self):
         model = Sequential([
-            LSTM(50, activation='relu', input_shape=(self.sequence_length, 1)),
+            LSTM(64, return_sequences=True, input_shape=(self.sequence_length, 1)),
+            Dropout(0.2),
+            LSTM(32),
             Dense(1)
         ])
         model.compile(optimizer='adam', loss='mse')
-        self.model = model
-        return model
+        self.lstm_model = model
 
-    def train_mock_model(self):
-        """Train on synthetic data since we don't have real historical DB"""
-        print("🧠 Training AQI LSTM Model...")
-        
-        # Generate synthetic historical data (sine wave + noise to simulate seasonal AQI)
-        X = []
-        y = []
-        
-        # Create 1000 samples
-        for i in range(1000):
-            # Generate a sequence
-            start_val = random.randint(50, 150)
-            seq = [start_val + math.sin(x/10)*20 + random.gauss(0, 5) for x in range(self.sequence_length + 1)]
-            X.append([[v] for v in seq[:-1]])
-            y.append(seq[-1])
+    def _get_city_paths(self, city_name):
+        """Helper to get file paths for a city's models"""
+        safe_name = "".join([c for c in city_name if c.isalnum() or c in (' ', '-', '_')]).strip().lower()
+        city_dir = os.path.join(self.models_dir, safe_name)
+        if not os.path.exists(city_dir):
+            os.makedirs(city_dir)
             
-        X = np.array(X)
-        y = np.array(y)
-        
-        if self.model is None:
-            self.build_model()
-            
-        self.model.fit(X, y, epochs=5, verbose=0)
-        self.is_trained = True
-        print("✅ AQI Model Trained")
+        return {
+            'lstm': os.path.join(city_dir, 'lstm_model.h5'),
+            'rf': os.path.join(city_dir, 'rf_model.joblib'),
+            'scaler': os.path.join(city_dir, 'scaler.joblib'),
+            'meta': os.path.join(city_dir, 'metadata.joblib')
+        }
 
-    def predict_future(self, current_aqi, days=30, historical_data=None):
+    def train(self, historical_data, city_name=None):
         """
-        Predict AQI for next N days with realistic constraints
-        
+        Train a fresh model specific to the provided city data.
         Args:
-            current_aqi: Current AQI value
-            days: Number of days to predict
-            historical_data: List of historical AQI values (if available from WAQI)
+            historical_data: List of daily AQI values (e.g., [140, 142, 138...])
+            city_name: Optional name of city to persistent the model for
         """
-        import random
-        import math
+        print(f"🧠 Training Hybrid Model on {len(historical_data)} data points" + (f" for {city_name}" if city_name else "") + "...")
+
+        # 1. Prepare Data
+        X_lstm, X_rf, y = self._prepare_data(historical_data)
         
-        predictions = []
+        if len(X_lstm) < 10:
+            print("⚠️ Not enough data to train real model. Falling back to synthetic.")
+            self._train_synthetic_fallback(city_name)
+            return
+
+        # 2. Train LSTM
+        self.build_lstm_model()
+        self.lstm_model.fit(X_lstm, y, epochs=15, batch_size=16, verbose=0)
+
+        # 3. Train Random Forest
+        self.rf_model = RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)
+        self.rf_model.fit(X_rf, y)
+
+        self.is_trained = True
         
-        # Calculate historical statistics if available
-        if historical_data and len(historical_data) >= 5:
-            hist_mean = sum(historical_data) / len(historical_data)
-            hist_std = math.sqrt(sum((x - hist_mean) ** 2 for x in historical_data) / len(historical_data))
-            hist_min = min(historical_data)
-            hist_max = max(historical_data)
+        # 4. Save to Disk if city_name provided
+        if city_name:
+            print(f"💾 Saving model for {city_name} to disk...")
+            paths = self._get_city_paths(city_name)
+            try:
+                self.lstm_model.save(paths['lstm'])
+                joblib.dump(self.rf_model, paths['rf'])
+                joblib.dump(self.scaler, paths['scaler'])
+                joblib.dump({'trained_on_points': len(historical_data)}, paths['meta'])
+                print(f"✅ Model saved successfully for {city_name}")
+            except Exception as e:
+                print(f"⚠️ Failed to save model: {e}") 
+            
+        print("✅ Hybrid Model Trained")
+
+    def _train_synthetic_fallback(self, city_name=None):
+        """Generates dummy data if real history is missing"""
+        print("⚠️ Generating synthetic training data...")
+        dummy_history = []
+        for i in range(365):
+            val = 100 + math.sin(i/30)*40 + random.gauss(0, 10)
+            dummy_history.append(max(20, val))
+        
+        # Recursively call train with dummy data
+        self.train(dummy_history, city_name)
+
+    def predict_future(self, current_aqi, days=30, historical_data=None, city_name=None):
+        """
+        Predict AQI for next N days.
+        Input:
+            current_aqi: The specific value for today
+            historical_data: The past data for the city (used to train!)
+            city_name: Optional city name to check for saved model
+        """
+        
+        # STEP 0: Prepare input sequence 
+        clean_history = []
+        input_sequence = []
+        
+        if historical_data and len(historical_data) >= self.sequence_length:
+            if isinstance(historical_data[0], dict):
+                clean_history = [d['aqi'] for d in historical_data]
+            else:
+                clean_history = historical_data
+            input_sequence = clean_history[-self.sequence_length:]
         else:
-            # Use current AQI with reasonable variation
-            hist_mean = current_aqi
-            hist_std = current_aqi * 0.15  # 15% standard deviation
-            hist_min = current_aqi * 0.7   # Can go 30% lower
-            hist_max = current_aqi * 1.3   # Can go 30% higher
+            input_sequence = [current_aqi] * self.sequence_length
+
+        # STEP 1: Model Management (Disk Load vs Train)
+        model_loaded = False
         
-        # Start with current AQI
-        current_val = current_aqi
-        
-        for day in range(days):
-            # Mean reversion: predictions tend to drift back toward the mean
-            mean_reversion_strength = 0.1  # 10% pull toward mean each day
-            drift_to_mean = (hist_mean - current_val) * mean_reversion_strength
+        # Try to load from disk
+        if city_name:
+            paths = self._get_city_paths(city_name)
+            if os.path.exists(paths['lstm']) and os.path.exists(paths['rf']):
+                try:
+                    print(f"📂 Loading saved model for {city_name}...")
+                    self.lstm_model = load_model(paths['lstm'])
+                    self.rf_model = joblib.load(paths['rf'])
+                    self.scaler = joblib.load(paths['scaler'])
+                    self.is_trained = True
+                    model_loaded = True
+                    print(f"⚡ Loaded {city_name} model from disk")
+                except Exception as e:
+                    print(f"⚠️ Error loading saved model, retraining... {e}")
             
-            # Seasonal/weekly pattern (slight variation)
-            seasonal_effect = math.sin(day / 7 * math.pi) * hist_std * 0.3
+        # If not loaded, train new
+        if not model_loaded:
+            if clean_history:
+                self.train(clean_history, city_name)
+            else:
+                if not self.is_trained:
+                    self._train_synthetic_fallback(city_name)
+
+        predictions = []
+        curr_seq = list(input_sequence)
+
+        # STEP 2: Rolling Prediction
+        for _ in range(days):
+            # Prepare inputs
+            # Scale LSTM input
+            seq_array = np.array(curr_seq[-self.sequence_length:]).reshape(-1, 1)
+            seq_scaled = self.scaler.transform(seq_array)
+            lstm_in = seq_scaled.reshape(1, self.sequence_length, 1)
             
-            # Random daily variation
-            daily_noise = random.gauss(0, hist_std * 0.5)
-            
-            # Calculate next value
-            next_val = current_val + drift_to_mean + seasonal_effect + daily_noise
-            
-            # Apply realistic constraints
-            # AQI typically doesn't jump more than 20% day-to-day
-            max_daily_change = current_aqi * 0.2
-            if abs(next_val - current_val) > max_daily_change:
-                if next_val > current_val:
-                    next_val = current_val + max_daily_change
-                else:
-                    next_val = current_val - max_daily_change
-            
-            # Keep within historical range (with small buffer)
-            next_val = max(hist_min * 0.9, min(hist_max * 1.1, next_val))
-            
-            # Ensure non-negative
-            next_val = max(0, next_val)
+            # RF Input (Raw)
+            rf_in = np.array(curr_seq[-self.sequence_length:]).reshape(1, -1)
+
+            try:
+                # Get scaled predictions from both
+                lstm_pred_scaled = self.lstm_model.predict(lstm_in, verbose=0)[0][0]
+                rf_pred_scaled = self.rf_model.predict(rf_in)[0]
+
+                # Weighted Average (Hybrid)
+                hybrid_scaled = (lstm_pred_scaled * self.lstm_weight) + (rf_pred_scaled * self.rf_weight)
+                
+                # Inverse transform to get real AQI
+                next_val = self.scaler.inverse_transform([[hybrid_scaled]])[0][0]
+                
+                # Add slight noise to prevent flatlining lines in graphs
+                next_val += random.gauss(0, 2)
+                
+            except Exception as e:
+                print(f"Prediction Error: {e}")
+                next_val = curr_seq[-1]
+
+            # Constraints (AQI cannot be negative)
+            next_val = max(10, next_val)
             
             predictions.append(int(next_val))
-            current_val = next_val
-        
+            curr_seq.append(next_val)
+
         return predictions
 
     def get_lightning_risk(self, city, building_type, lat=None, lng=None):

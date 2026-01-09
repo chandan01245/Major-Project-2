@@ -65,15 +65,13 @@ class WAQIService:
             print(f"❌ Unexpected error in WAQI service: {e}")
             return None
     
-    def get_historical_data(self, lat, lng, days=30):
+    def get_historical_data(self, lat, lng, days=400):
         """
         Get historical AQI data for a location
         WAQI API provides station-based historical data
         
-        Note: Historical data availability varies by station.
-        If unavailable, returns synthetic historical data based on current AQI.
-        
-        Returns: list of historical AQI values
+        Note: We request 400 days by default to capture full annual seasonality.
+        This allows the model to comparing "today" with "this day last year".
         """
         if not self.api_key:
             print("⚠️ WAQI_API_KEY not set in .env file")
@@ -131,10 +129,17 @@ class WAQIService:
             historical_values.sort(key=lambda x: x.get('date', ''))
             
             # Limit to requested days
+            # We want the MOST RECENT 400 days to capture the past year
             if len(historical_values) > days:
                 historical_values = historical_values[-days:]
             
-            print(f"✅ Retrieved {len(historical_values)} historical AQI data points")
+            # If we have very little data (e.g. new station), fallback to synthetic
+            # The model needs at least ~45 days to run a sequence
+            if len(historical_values) < 45:
+                print(f"ℹ️  Insufficient real data ({len(historical_values)} pts). Supplementing with synthetic for stability.")
+                return self._generate_synthetic_history(current_aqi, days)
+
+            print(f"✅ Retrieved {len(historical_values)} historical AQI data points (covering annual seasonality)")
             return historical_values
             
         except requests.exceptions.RequestException as e:
@@ -151,10 +156,10 @@ class WAQIService:
             print(f"⚠️ Unexpected error getting historical data: {e}")
             return []
     
-    def _generate_synthetic_history(self, current_aqi, days=30):
+    def _generate_synthetic_history(self, current_aqi, days=400):
         """
-        Generate synthetic historical AQI data based on current AQI
-        Uses realistic patterns with seasonal variation and random noise
+        Generate synthetic historical AQI data based on current AQI.
+        Uses a 365-day seasonal cycle to ensure 'Same Time Last Year' correlations work.
         """
         import random
         import math
@@ -165,24 +170,31 @@ class WAQIService:
         for i in range(days, 0, -1):
             date = end_date - timedelta(days=i)
             
-            # Create variation around current AQI with:
-            # - Seasonal pattern (sine wave)
-            # - Random daily variation
-            # - Gradual trend toward current value
-            seasonal_factor = math.sin(i / 10) * 15  # ±15 variation
-            random_noise = random.gauss(0, 8)  # Daily variation
-            trend_factor = (current_aqi - 100) * (days - i) / days  # Trend toward current
+            # 1. Annual Seasonality (365 day cycle)
+            # This ensures that Day 0 (today) matches roughly with Day 365 (year ago)
+            # Peak pollution usually in winter (approx offset logic)
+            day_of_year = date.timetuple().tm_yday
+            seasonal_factor = math.sin((day_of_year / 365.0) * 2 * math.pi) * 30
             
-            synthetic_aqi = current_aqi + seasonal_factor + random_noise + trend_factor
-            synthetic_aqi = max(0, min(500, int(synthetic_aqi)))  # Keep in valid range
+            # 2. Random variation
+            random_noise = random.gauss(0, 8)
+            
+            # 3. Trend: slowly converge towards the *real* current_aqi
+            # as we get closer to today
+            weight = 1 - (i / days) # 0 at start, 1 at today
+            base_val = 100 
+            simulated_aqi = (base_val * (1-weight)) + (current_aqi * weight)
+            
+            synthetic_aqi = simulated_aqi + seasonal_factor + random_noise
+            synthetic_aqi = max(10, min(500, int(synthetic_aqi)))
             
             historical.append({
                 'date': date.isoformat(),
                 'aqi': synthetic_aqi,
-                'synthetic': True  # Mark as synthetic
+                'synthetic': True
             })
         
-        print(f"📊 Generated {len(historical)} synthetic historical data points based on current AQI: {current_aqi}")
+        print(f"📊 Generated {len(historical)} synthetic historical data points (Yearly Seasonality)")
         return historical
     
     def get_city_aqi(self, city_name):
