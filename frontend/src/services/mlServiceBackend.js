@@ -387,7 +387,7 @@ class MLServiceBackend {
       // Create a timeout promise
       const timeout = new Promise(
         (_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out")), 60000) // 60 second timeout
+          setTimeout(() => reject(new Error("Request timed out")), 240000) // 240 second timeout
       );
 
       // Create the fetch promise
