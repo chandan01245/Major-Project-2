@@ -10,6 +10,7 @@ import random
 import math
 import os
 from tensorflow.keras.models import load_model
+from .lightning_model import LightningPredictor
 
 class AQIPredictor:
     def __init__(self):
@@ -20,6 +21,9 @@ class AQIPredictor:
         self.is_trained = False
         self.lstm_weight = 0.60   # Favor LSTM for trend direction
         self.rf_weight = 0.40     # Use RF primarily for stabilizing the magnitude
+        
+        # Initialize lightning predictor
+        self.lightning_predictor = LightningPredictor()
         
         # Setup storage directory
         self.models_dir = os.path.join(os.path.dirname(__file__), 'saved_models')
@@ -378,89 +382,17 @@ class AQIPredictor:
 
     def get_lightning_risk(self, city, building_type, lat=None, lng=None):
         """
-        Calculate lightning risk based on location, climate data, and building characteristics
+        Calculate lightning risk using ML model trained on Open-Meteo historical weather data
         
         Args:
             city: City name
             building_type: Type of building (residential, commercial, etc.)
-            lat: Latitude (optional, for more precise calculation)
-            lng: Longitude (optional, for more precise calculation)
+            lat: Latitude (required for ML prediction)
+            lng: Longitude (required for ML prediction)
         """
-        import math
+        if lat is None or lng is None:
+            print("⚠️  No coordinates provided, using static fallback")
+            return self.lightning_predictor._fallback_assessment(city, building_type)
         
-        # Lightning flash density data (flashes per km² per year) for major cities
-        # Source: Based on Indian Meteorological Department and global lightning data
-        lightning_density = {
-            'bangalore': 8.5,  # High activity
-            'bengaluru': 8.5,
-            'mumbai': 5.2,
-            'delhi': 4.8,
-            'hyderabad': 7.2,
-            'kolkata': 9.1,  # Very high
-            'chennai': 6.5,
-            'pune': 6.0,
-            'ranchi': 8.8,
-            'bhubaneswar': 8.3,
-            'new_york': 3.5,  # Moderate
-            'singapore': 7.8,  # High (tropical)
-        }
-        
-        # Get base lightning density for the city
-        base_density = lightning_density.get(city.lower(), 5.0)  # Default 5 flashes/km²/year
-        
-        # Building height risk multipliers
-        height_multipliers = {
-            'residential': 1.0,      # Typically lower buildings
-            'commercial': 1.5,       # Medium to tall buildings
-            'industrial': 1.2,       # Usually moderate height
-            'mixed': 1.4            # Mix of heights
-        }
-        
-        # Building material considerations (taller commercial buildings = more risk)
-        building_multiplier = height_multipliers.get(building_type, 1.0)
-        
-        # Calculate annual strike probability for the area
-        # Assuming average building footprint of 0.001 km² (1000 sqm)
-        area_km2 = 0.001
-        annual_strikes = base_density * area_km2 * building_multiplier
-        
-        # Calculate probability percentage (chance of strike in next year)
-        probability = min(annual_strikes * 100, 95)  # Cap at 95%
-        
-        # Determine risk level
-        if probability < 5:
-            risk_level = "Low"
-            recommendation = "Standard building grounding as per local electrical codes."
-        elif probability < 15:
-            risk_level = "Medium"
-            recommendation = "Install basic lightning protection system (LPS) with air terminals and down conductors."
-        elif probability < 30:
-            risk_level = "High"
-            recommendation = "Install advanced LPS (Lightning Protection System) as per IS/IEC 62305 standards, including surge protection devices."
-        else:
-            risk_level = "Very High"
-            recommendation = "Mandatory comprehensive LPS installation with multiple protection zones, surge arresters, and regular maintenance inspections."
-        
-        # Additional warnings based on location
-        warnings = []
-        if city.lower() in ['bangalore', 'bengaluru', 'kolkata', 'ranchi', 'bhubaneswar']:
-            warnings.append("Location is in high lightning activity zone")
-        
-        if building_type in ['commercial', 'mixed']:
-            warnings.append("Taller structures increase strike risk")
-        
-        # Seasonal considerations
-        warnings.append("Risk increases during monsoon season (June-September)")
-        
-        return {
-            'level': risk_level,
-            'riskLevel': risk_level,  # For backward compatibility
-            'probability': round(probability, 1),
-            'recommendation': recommendation,
-            'warning': recommendation,  # For backward compatibility
-            'lightningDensity': base_density,
-            'annualStrikes': round(annual_strikes, 2),
-            'warnings': warnings,
-            'buildingType': building_type,
-            'protectionRequired': probability > 10
-        }
+        # Use the ML-based lightning predictor
+        return self.lightning_predictor.predict_risk(lat, lng, city, building_type)
