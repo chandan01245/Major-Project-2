@@ -4,7 +4,7 @@ FROM node:18-alpine AS frontend-build
 WORKDIR /app
 
 # Copy frontend package files
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm install --production=false
 
 # Accept build arguments for API keys
@@ -16,9 +16,9 @@ ENV REACT_APP_MAPTILER_KEY=$REACT_APP_MAPTILER_KEY
 ENV REACT_APP_GEOAPIFY_KEY=$REACT_APP_GEOAPIFY_KEY
 
 # Copy frontend source
-COPY public ./public
-COPY src ./src
-COPY tailwind.config.js postcss.config.js ./
+COPY frontend/public ./public
+COPY frontend/src ./src
+COPY frontend/tailwind.config.js frontend/postcss.config.js ./
 
 # Build React app
 RUN npm run build
@@ -70,7 +70,8 @@ RUN mkdir -p data uploads zoning-documents models
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PORT=5000 \
-    FLASK_ENV=production
+    FLASK_ENV=production \
+    PYTHONPATH=/app
 
 # Expose port
 EXPOSE 5000
@@ -80,4 +81,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Run with gunicorn
-CMD ["gunicorn", "--workers=4", "--bind=0.0.0.0:5000", "--timeout=120", "--access-logfile=-", "--error-logfile=-", "app:app"]
+CMD ["gunicorn", "--workers=4", "--bind=0.0.0.0:5000", "--timeout=120", "--access-logfile=-", "--error-logfile=-", "core.app:app"]
