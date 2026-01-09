@@ -117,6 +117,38 @@ class MLServiceBackend {
     }
   }
 
+  async getAQIForecast(lat, lng, days = 30, startDate = null, endDate = null) {
+    if (!this.backendAvailable) {
+      // Return simulated data
+      return Array.from({ length: days }, (_, i) => ({
+        day: `Day ${i + 1}`,
+        aqi: Math.floor(Math.random() * 100) + 50
+      }));
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/aqi/forecast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          lat, 
+          lng, 
+          days,
+          startDate,
+          endDate
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch AQI forecast");
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error fetching AQI forecast:", error);
+      throw error;
+    }
+  }
+
   // Helper to fetch amenities from Overpass API
   async _fetchAmenitiesFromOverpass(lat, lng) {
     try {
@@ -399,6 +431,7 @@ class MLServiceBackend {
       return {
         ...data.report,
         amenities: data.report.amenities || amenities,
+        centroid: { lat: centroid[1], lng: centroid[0] } // Add centroid for report
       };
     } catch (error) {
       console.error("Error generating report:", error);

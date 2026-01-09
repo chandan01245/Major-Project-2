@@ -159,6 +159,11 @@ class AQIPredictor:
         """
         print(f"🔮 Prediction Request: Forecast {days} days for {city_name or 'Unknown'} (Current: {current_aqi})")
         
+        # Limit to 365 days to prevent excessive computation
+        if days > 365:
+            print(f"⚠️ Prediction request for {days} days capped at 365 days.")
+            days = 365
+
         # STEP 0: Prepare input sequence 
         clean_history = []
         input_sequence = []

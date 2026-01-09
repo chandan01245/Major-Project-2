@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 
 # Add backend directory to path
@@ -763,7 +763,42 @@ def get_aqi_forecast():
     try:
         lat = data['lat']
         lng = data['lng']
-        days = data.get('days', 30)
+        
+        # Handle Date Range Logic
+        start_date_str = data.get('startDate')
+        end_date_str = data.get('endDate')
+        
+        today = datetime.now()
+        
+        # Determine prediction horizon
+        days_to_predict = 30 # Default
+        start_offset = 0
+        
+        if start_date_str and end_date_str:
+            # Parse dates (assuming YYYY-MM-DD format from frontend)
+            try:
+                start_date = datetime.strptime(start_date_str[:10], '%Y-%m-%d')
+                end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d')
+                
+                # Calculate days from NOW to the end of the range
+                days_until_end = (end_date - today).days + 1
+                
+                # We need to predict at least until the end date
+                # But ensure we don't go back in time or predict 0 days if dates are old
+                days_to_predict = max(1, days_until_end)
+                
+                # Calculate offset for results
+                start_offset = (start_date - today).days
+                if start_offset < 0: start_offset = 0
+                
+            except ValueError as e:
+                print(f"Date parsing error: {e}")
+                days_to_predict = 30
+        else:
+             days_to_predict = data.get('days', 30)
+        
+        # Cap prediction at 365 days to prevent timeout
+        days_to_predict = min(days_to_predict, 365)
         
         # Get current AQI
         waqi_data = waqi_service.get_current_aqi(lat, lng)
@@ -772,7 +807,7 @@ def get_aqi_forecast():
             return jsonify({
                 'success': False,
                 'error': 'Could not fetch current AQI data'
-            }), 404
+            }, 404)
         
         current_aqi = waqi_data['aqi']
         
@@ -780,18 +815,44 @@ def get_aqi_forecast():
         historical_aqi = waqi_service.get_historical_data(lat, lng, days=400)
         
         # Predict future AQI
-        forecast = aqi_predictor.predict_future(
+        # We predict from tomorrow onwards for 'days_to_predict' days
+        full_forecast = aqi_predictor.predict_future(
             current_aqi, 
-            days=days, 
+            days=days_to_predict, 
             historical_data=historical_aqi,
             city_name=waqi_data.get('city', 'unknown')
         )
         
+        # Slice forecast based on requested range
+        # full_forecast[0] corresponds to Tomorrow
+        # start_offset=0 means start from Tomorrow
+        
+        if start_offset >= len(full_forecast):
+             sliced_forecast = []
+        else:
+             # If user asked for range, slice it
+             if start_date_str and end_date_str:
+                 # Calculate duration of requested window
+                 duration = (end_date - start_date).days + 1
+                 sliced_forecast = full_forecast[start_offset : start_offset + duration]
+             else:
+                 sliced_forecast = full_forecast
+
+        # Generate date labels for the frontend
+        forecast_dates = []
+        # Start date for the results
+        result_start_date = today + timedelta(days=start_offset + 1)
+        
+        for i in range(len(sliced_forecast)):
+            d = result_start_date + timedelta(days=i)
+            forecast_dates.append(d.strftime('%Y-%m-%d'))
+
         return jsonify({
             'success': True,
             'current_aqi': current_aqi,
             'city': waqi_data['city'],
-            'forecast': forecast,
+            'forecast': sliced_forecast,
+            'forecast_dates': forecast_dates,
             'historical_data_points': len(historical_aqi) if historical_aqi else 0
         })
         

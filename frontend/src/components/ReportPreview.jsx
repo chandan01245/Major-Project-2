@@ -4,6 +4,7 @@ import {
   Award,
   Building,
   Bus,
+  Calendar,
   Car,
   CheckCircle,
   DollarSign,
@@ -14,12 +15,15 @@ import {
   Home,
   Info,
   MapPin,
+  RefreshCw,
   Ruler,
   TrendingUp,
   Wind,
   X,
   Zap,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import mlService from "../services/mlServiceBackend";
 import {
   CartesianGrid,
   Line,
@@ -42,12 +46,76 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
     scenarios,
     mlConfidence,
     recommendations,
-    aqiForecast,
+    aqiForecast: initialAqiForecast,
     lightningRisk,
     floodRisk,
     traffic,
     cityInfo,
   } = report;
+
+  // State for AQI Forecast
+  const [aqiForecast, setAqiForecast] = useState(initialAqiForecast || []);
+  const [aqiLoading, setAqiLoading] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  });
+  const [aqiDates, setAqiDates] = useState([]);
+
+  useEffect(() => {
+    // If we have initial dates from backend (checking if they exist in report)
+    if (report.forecast_dates && report.forecast_dates.length > 0) {
+       setAqiDates(report.forecast_dates);
+    } else {
+       // Generate default labels if backend didn't provide dates
+       const labels = (initialAqiForecast || []).map((_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() + i + 1);
+          return d.toLocaleDateString();
+       });
+       setAqiDates(labels);
+    }
+  }, [report]);
+
+  const handleAqiUpdate = async () => {
+    setAqiLoading(true);
+    try {
+      // Find centroid from parcelInfo (or pass it if available)
+      // Since we don't have lat/lng directly exposed in top level, we might need to rely on the fact 
+      // that we can't easily get it here unless passed. 
+      // Workaround: Report usually doesn't have raw lat/lng readily available in `parcelInfo` 
+      // unless we modify `generateReport` to include it.
+      // Let's assume we can't get it easily without passing it.
+      // Checking `report` structure... nothing obvious.
+      // Wait! `report.location` might exist? No.
+      // Let's modify `mlService.generateReport` in `mlServiceBackend.js` to include centroid in report!
+      
+      if (!report.centroid) {
+         console.error("Report missing centroid data for AQI refresh");
+         setAqiLoading(false);
+         return;
+      }
+      
+      const { lat, lng } = report.centroid;
+      const result = await mlService.getAQIForecast(
+        lat, 
+        lng, 
+        undefined, // days is calculated by backend from dates
+        dateRange.startDate, 
+        dateRange.endDate
+      );
+      
+      if (result.success) {
+        setAqiForecast(result.forecast);
+        setAqiDates(result.forecast_dates); // Backend needs to send this
+      }
+    } catch (e) {
+      console.error("Failed to update AQI", e);
+    } finally {
+      setAqiLoading(false);
+    }
+  };
+
 
   // Get currency symbol, fallback to ₹ if not available
   const currencySymbol =
@@ -96,7 +164,8 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
 
   const aqiData = aqiForecast
     ? aqiForecast.map((val, idx) => ({
-        day: `Day ${idx + 1}`,
+        day: aqiDates && aqiDates[idx] ? aqiDates[idx] : `Day ${idx + 1}`,
+        rawDate: aqiDates && aqiDates[idx] ? aqiDates[idx] : null,
         aqi: val,
       }))
     : [];
@@ -783,20 +852,57 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
               </h3>
               <div className="space-y-3">
                 <div className="bg-white border border-emerald-200 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="bg-cyan-100 p-2 rounded-lg">
-                      <Wind className="w-4 h-4 text-cyan-600" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-cyan-100 p-2 rounded-lg">
+                        <Wind className="w-4 h-4 text-cyan-600" />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-800">
+                        AQI Forecast
+                        </h4>
                     </div>
-                    <h4 className="text-sm font-bold text-slate-800">
-                      AQI Forecast (30 Days)
-                    </h4>
                   </div>
+                  
+                  {/* Date Range Controls */}
+                  <div className="flex flex-wrap items-end gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-500 font-medium ml-1">Start Date</label>
+                        <input 
+                            type="date" 
+                            className="text-xs p-1.5 rounded border border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            value={dateRange.startDate}
+                            min={new Date().toISOString().split('T')[0]}
+                            onChange={(e) => setDateRange(prev => ({...prev, startDate: e.target.value}))}
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-500 font-medium ml-1">End Date</label>
+                        <input 
+                            type="date" 
+                            className="text-xs p-1.5 rounded border border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            value={dateRange.endDate}
+                            min={dateRange.startDate}
+                            max={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]} 
+                            onChange={(e) => setDateRange(prev => ({...prev, endDate: e.target.value}))}
+                        />
+                    </div>
+                    <button 
+                        onClick={handleAqiUpdate}
+                        disabled={aqiLoading}
+                        className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${aqiLoading ? 'animate-spin' : ''}`} />
+                        {aqiLoading ? 'Updating...' : 'Update Forecast'}
+                    </button>
+                  </div>
+
                   <ResponsiveContainer width="100%" height={150}>
                     <LineChart data={aqiData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="day" hide />
                       <YAxis stroke="#94a3b8" style={{ fontSize: "10px" }} />
                       <Tooltip
+                        labelStyle={{ color: '#64748b', fontSize: '10px' }}
                         contentStyle={{
                           backgroundColor: "#fff",
                           borderRadius: "8px",
@@ -814,7 +920,7 @@ const ReportPreview = ({ report, onClose, onDownload }) => {
                     </LineChart>
                   </ResponsiveContainer>
                   <p className="text-xs text-slate-500 mt-2 text-center">
-                    Predicted AQI trend
+                    Predicted AQI trend ({aqiData.length} days)
                   </p>
                 </div>
 
