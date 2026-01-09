@@ -15,8 +15,28 @@ COPY tailwind.config.js postcss.config.js ./
 # Build React app
 RUN npm run build
 
-# Stage 2: Python Backend with Built Frontend
-FROM python:3.9-slim
+# Stage 2: Serve Frontend with Nginx
+FROM nginx:alpine AS frontend
+WORKDIR /usr/share/nginx/html
+
+# Remove default nginx config and static files
+RUN rm -rf /etc/nginx/nginx.conf /usr/share/nginx/html/*
+
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy built React app
+COPY --from=frontend-build /app/build .
+
+# Expose port 80
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+
+# Stage 3: Python Backend
+FROM python:3.9-slim AS backend
 WORKDIR /app
 
 # Install system dependencies
@@ -26,15 +46,15 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy backend requirements
+# Copy backend requirements and install
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download NLTK data
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('wordnet')"
+
 # Copy backend code
 COPY backend/ ./
-
-# Copy built frontend to serve from Flask
-COPY --from=frontend-build /app/build ./static
 
 # Create necessary directories
 RUN mkdir -p data uploads zoning-documents models
