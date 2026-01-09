@@ -126,40 +126,53 @@ class WAQIService:
             
             historical_values = []
             
-            # Open-Meteo returns hourly data, we want daily averages (approximate)
-            # We skip 24 hours at a time to keep data size manageable and consistent with daily app logic
+            # Open-Meteo returns hourly data, we want daily averages
+            # We aggregate 24 hours to get a proper daily representative
+            print(f"📊 Processing {len(times)} hours of data into daily averages...", flush=True)
+
             for i in range(0, len(times), 24):
-                if i >= len(pm25_vals): break # Safety check
+                # Define slice for the day
+                day_end = min(i + 24, len(times))
                 
-                # Calculate sub-indices for each pollutant
-                # Helper function _calc_pollutant_aqi(concentration, pollutant_type)
+                # Helper to get valid average for a slice
+                def get_day_avg(arr, start, end):
+                    if not arr: return None
+                    # Handle case where array might be shorter than times
+                    valid_slice = arr[start:min(end, len(arr))]
+                    valid_vals = [x for x in valid_slice if x is not None]
+                    if not valid_vals: return None
+                    return sum(valid_vals) / len(valid_vals)
+
+                # Get daily averages (raw concentrations)
+                avg_pm25 = get_day_avg(pm25_vals, i, day_end)
+                avg_pm10 = get_day_avg(pm10_vals, i, day_end)
+                avg_o3 = get_day_avg(o3_vals, i, day_end)
+                avg_no2 = get_day_avg(no2_vals, i, day_end)
+                avg_so2 = get_day_avg(so2_vals, i, day_end) # Just for storage
                 
-                # PM2.5 (avg)
-                pm25 = pm25_vals[i] if i < len(pm25_vals) else None
-                aqi_pm25 = self._pm25_to_aqi(pm25)
-                
-                # PM10
-                pm10 = pm10_vals[i] if i < len(pm10_vals) else None
-                aqi_pm10 = self._calc_pollutant_aqi(pm10, 'pm10')
-                
-                # O3 (Ozone)
-                o3 = o3_vals[i] if i < len(o3_vals) else None
-                aqi_o3 = self._calc_pollutant_aqi(o3, 'o3')
-                
-                # NO2
-                no2 = no2_vals[i] if i < len(no2_vals) else None
-                aqi_no2 = self._calc_pollutant_aqi(no2, 'no2')
+                # Convert to AQI sub-indices
+                aqi_pm25 = self._pm25_to_aqi(avg_pm25)
+                aqi_pm10 = self._calc_pollutant_aqi(avg_pm10, 'pm10')
+                aqi_o3 = self._calc_pollutant_aqi(avg_o3, 'o3')
+                aqi_no2 = self._calc_pollutant_aqi(avg_no2, 'no2')
                 
                 # Take the MAX AQI as the overall AQI for that day
-                # (Standard EPA method: AQI for the day is the highest of the individual pollutant AQIs)
                 daily_aqi = max(aqi_pm25, aqi_pm10, aqi_o3, aqi_no2)
                 
+                # Debug print for last few days
+                if i >= len(times) - 72: # Last 3 days (approx)
+                    print(f"   Date: {times[i]} | PM2.5: {avg_pm25} -> AQI: {aqi_pm25} | Max AQI: {daily_aqi}")
+
                 if daily_aqi > 0:
                     historical_values.append({
                         "date": times[i],
                         "aqi": daily_aqi,
                         "components": {
-                            "pm25": pm25, "pm10": pm10, "o3": o3, "no2": no2, "so2": so2_vals[i] if i < len(so2_vals) else None
+                            "pm25": avg_pm25, 
+                            "pm10": avg_pm10, 
+                            "o3": avg_o3, 
+                            "no2": avg_no2, 
+                            "so2": avg_so2
                         }
                     })
                 
@@ -204,7 +217,7 @@ class WAQIService:
 
     def _pm25_to_aqi(self, pm25):
         """Helper to convert PM2.5 concentration (µg/m³) to US AQI"""
-        if pm25 is None: return 50
+        if pm25 is None: return 0
         if pm25 <= 12.0:
             return int((50 - 0) / (12.0 - 0) * (pm25 - 0) + 0)
         elif pm25 <= 35.4:
