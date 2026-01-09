@@ -816,7 +816,7 @@ class PDFService {
     doc.setFontSize(12);
     doc.text(value, 25, yPos + 11);
 
-    return yPos + 18;
+    return yPos + 20;
   }
 
   getAQILevel(aqi) {
