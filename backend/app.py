@@ -33,6 +33,7 @@ from flood_model import FloodPredictor
 from waqi_service import WAQIService
 from geocoding_service import GeocodingService
 from city_config import get_city_config, format_currency, format_number
+from location_validator import validate_location_for_development
 
 load_dotenv() # Load environment variables
 
@@ -198,6 +199,25 @@ def predict_zoning():
     
     try:
         polygon = data['polygon']
+        
+        # ⭐ OCEAN VALIDATION - Prevent reports over water
+        print("🌊 Validating location is not over ocean...")
+        validation = validate_location_for_development(
+            polygon=polygon,
+            check_ocean=True,
+            check_protected=False  # Optional: can be enabled later
+        )
+        
+        if not validation['is_valid']:
+            print(f"❌ Location validation failed: {validation['errors']}")
+            return jsonify({
+                'error': 'Invalid location for development',
+                'details': validation['errors'],
+                'ocean_check': validation.get('ocean_check', {})
+            }), 400
+        
+        print("✅ Location validation passed")
+        
         nearby_areas = data.get('nearby_areas', [])
         city = data.get('city', 'bangalore').lower()  # Get city from request
         
@@ -236,6 +256,28 @@ def generate_report():
 
     try:
         polygon = data['polygon']
+        
+        # ⭐ OCEAN VALIDATION - Prevent reports over water
+        print("🌊 Validating location is not over ocean...")
+        validation = validate_location_for_development(
+            polygon=polygon,
+            check_ocean=True,
+            check_protected=False
+        )
+        
+        if not validation['is_valid']:
+            ocean_info = validation.get('ocean_check', {})
+            percentage = ocean_info.get('percentage_ocean', 0)
+            print(f"❌ Location rejected: {percentage:.1f}% over water")
+            return jsonify({
+                'error': 'Cannot generate report for ocean/sea locations',
+                'details': validation['errors'],
+                'percentage_ocean': percentage,
+                'message': f"Selected area is {percentage:.1f}% over water. Please select a land area."
+            }), 400
+        
+        print("✅ Location validated - proceeding with report generation")
+        
         nearby_areas = data.get('nearby_areas', [])
         city = data.get('city', 'bangalore').lower()
 

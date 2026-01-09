@@ -5,7 +5,15 @@ WORKDIR /app
 
 # Copy frontend package files
 COPY package*.json ./
-RUN npm ci --production=false
+RUN npm install --production=false
+
+# Accept build arguments for API keys
+ARG REACT_APP_MAPTILER_KEY
+ARG REACT_APP_GEOAPIFY_KEY
+
+# Set as environment variables for build
+ENV REACT_APP_MAPTILER_KEY=$REACT_APP_MAPTILER_KEY
+ENV REACT_APP_GEOAPIFY_KEY=$REACT_APP_GEOAPIFY_KEY
 
 # Copy frontend source
 COPY public ./public

@@ -37,6 +37,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: frontend
+      args:
+        REACT_APP_MAPTILER_KEY: ${REACT_APP_MAPTILER_KEY}
+        REACT_APP_GEOAPIFY_KEY: ${REACT_APP_GEOAPIFY_KEY}
     container_name: urbanform-frontend
     ports:
       - "3000:80"

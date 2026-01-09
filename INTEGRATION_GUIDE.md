@@ -13,6 +13,7 @@ This file provides instructions for integrating all edge case handlers into the 
 from validators import validate_json, validate_request_size
 from file_validator import validate_file_upload, FileValidationError
 from geo_validator import validate_coordinates, validate_polygon, GeoValidationError
+from location_validator import validate_location_for_development  # NEW: Ocean/protected area validation
 from api_resilience import retry_with_backoff, get_circuit_breaker
 from amenities_cache import get_amenities_cache
 from geocoding_cache import get_geocoding_cache
@@ -71,6 +72,21 @@ def predict_zoning():
         # Validate coordinates in polygon
         for coord in polygon:
             validate_coordinates(coord[1], coord[0])  # lat, lng
+        
+        # ⭐ NEW: Validate location is not over ocean
+        location_validation = validate_location_for_development(
+            polygon=data['polygon'],
+            check_ocean=True,  # Always prevent ocean locations
+            check_protected=data.get('check_protected_areas', False),
+            allow_protected=data.get('allow_protected_development', False)
+        )
+        
+        if not location_validation['is_valid']:
+            return jsonify({
+                'error': 'Location validation failed',
+                'details': location_validation['errors'],
+                'warnings': location_validation.get('warnings', [])
+            }), 400
         
         # ... existing prediction code ...
         

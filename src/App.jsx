@@ -3,6 +3,7 @@ import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import * as maptilersdk from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 import * as turf from "@turf/turf";
+import { validateLocationForDevelopment, getLocationErrorMessage } from "./utils/locationValidator";
 import {
   AlertCircle,
   Building,
@@ -711,6 +712,32 @@ const IndianUrbanForm = () => {
         coord[0],
         coord[1],
       ]);
+      
+      // 🌊 OCEAN VALIDATION - Check if location is over water
+      console.log("🌊 Validating location...");
+      const validation = await validateLocationForDevelopment({
+        polygon: coordinates,
+      }, {
+        checkOcean: true,
+        checkProtected: false
+      });
+      
+      if (!validation.isValid) {
+        setIsLoading3D(false);
+        const errorMsg = getLocationErrorMessage(validation);
+        alert(`❌ Invalid Location\n\n${errorMsg}\n\nPlease select a land area for development.`);
+        
+        // Remove the drawn polygon
+        if (drawRef.current) {
+          drawRef.current.deleteAll();
+        }
+        
+        // Reset cursor
+        if (mapRef.current) mapRef.current.getCanvas().style.cursor = "";
+        return;
+      }
+      
+      console.log("✅ Location validated");
       setDrawnPolygon(coordinates);
       setIsDrawingMode(false);
 
@@ -907,6 +934,22 @@ const IndianUrbanForm = () => {
 
   const generateReportForPolygon = async (polygon) => {
     try {
+      // 🌊 OCEAN VALIDATION (backup check)
+      console.log("🌊 Final validation before report generation...");
+      const validation = await validateLocationForDevelopment({
+        polygon: polygon,
+      }, {
+        checkOcean: true,
+        checkProtected: false
+      });
+      
+      if (!validation.isValid) {
+        const errorMsg = getLocationErrorMessage(validation);
+        alert(`❌ Cannot Generate Report\n\n${errorMsg}\n\nPlease select a land area.`);
+        setIsGeneratingReport(false);
+        return;
+      }
+      
       // Find nearby areas from our fetched zones
       const centroid = polygon
         .reduce(

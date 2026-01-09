@@ -8,13 +8,91 @@
 # Frontend Edge Case Handlers - Integration Guide
 
 ## Table of Contents
-1. [API Error Handling](#api-error-handling)
-2. [Form Validation](#form-validation)
-3. [Safe State Management](#safe-state-management)
-4. [Error Boundaries](#error-boundaries)
-5. [Map Error Handling](#map-error-handling)
-6. [Browser Compatibility](#browser-compatibility)
-7. [File Upload Validation](#file-upload-validation)
+1. [Location Validation](#location-validation) ⭐ NEW
+2. [API Error Handling](#api-error-handling)
+3. [Form Validation](#form-validation)
+4. [Safe State Management](#safe-state-management)
+5. [Error Boundaries](#error-boundaries)
+6. [Map Error Handling](#map-error-handling)
+7. [Browser Compatibility](#browser-compatibility)
+8. [File Upload Validation](#file-upload-validation)
+
+---
+
+## Location Validation
+
+### Preventing Ocean Locations
+
+```javascript
+import {
+  validateLocationForDevelopment,
+  checkPolygonLocation,
+  showLocationValidationError
+} from './utils/locationValidator';
+
+// Validate before sending to backend
+async function handlePredictRequest(formData) {
+  // Quick ocean check
+  const validation = await validateLocationForDevelopment(formData, {
+    checkOcean: true
+  });
+
+  if (!validation.isValid) {
+    showLocationValidationError(validation);
+    return;
+  }
+
+  // Proceed with API call
+  submitPrediction(formData);
+}
+```
+
+### Check on Polygon Draw
+
+```javascript
+// In your map component
+map.on('draw.create', async function(e) {
+  const polygon = e.features[0].geometry.coordinates[0];
+  
+  // Immediate validation
+  const validation = await checkPolygonLocation(polygon, {
+    checkOcean: true
+  });
+
+  if (!validation.isValid) {
+    // Remove invalid polygon
+    draw.delete(e.features[0].id);
+    
+    // Show error
+    alert('⚠️ ' + validation.errors.join('\n'));
+    return;
+  }
+
+  // Valid polygon - proceed
+  setSelectedPolygon(polygon);
+});
+```
+
+### Protected Areas Toggle (Optional)
+
+```javascript
+function SettingsPanel() {
+  const [checkProtected, setCheckProtected] = useState(false);
+
+  return (
+    <label>
+      <input
+        type="checkbox"
+        checked={checkProtected}
+        onChange={(e) => setCheckProtected(e.target.checked)}
+      />
+      Check for national parks/protected areas
+    </label>
+  );
+}
+```
+
+**See [LOCATION_VALIDATION.md](LOCATION_VALIDATION.md) for complete guide.**
 
 ---
 
@@ -445,41 +523,52 @@ function handleUserInput(rawInput) {
 
 ## Quick Start Checklist
 
-1. **Wrap your app with ErrorBoundary**
+1. **⭐ Validate location to prevent ocean reports (NEW)**
+   ```javascript
+   const validation = await validateLocationForDevelopment(data);
+   if (!validation.isValid) {
+     showLocationValidationError(validation);
+     return;
+   }
+   ```
+
+2. **Wrap your app with ErrorBoundary**
    ```javascript
    <ErrorBoundary>
      <App />
    </ErrorBoundary>
    ```
 
-2. **Use safeFetch for all API calls**
+3. **Use safeFetch for all API calls**
    ```javascript
    const response = await safeFetch(url, options);
    ```
 
-3. **Validate all form inputs before submission**
+4. **Validate all form inputs before submission**
    ```javascript
    const validation = validatePredictRequest(data);
    if (!validation.isValid) return;
    ```
 
-4. **Use useSafeState instead of useState**
+5. **Use useSafeState instead of useState**
    ```javascript
    const [state, setState] = useSafeState(initialValue);
    ```
 
-5. **Validate polygons before sending to backend**
+6. **Validate polygons before sending to backend**
    ```javascript
    const validation = validatePolygon(polygon);
    const sanitized = sanitizePolygon(polygon);
    ```
 
-6. **Handle map errors gracefully**
+7. **Handle map errors gracefully**
    ```javascript
    try {
      await waitForMapReady(map);
      safeAddLayer(map, layerConfig);
-   } catch (error) {
+   } c**⭐ Location validation prevents ocean reports (NEW)**
+- [ ] **⭐ Polygon draw triggers immediate ocean check (NEW)**
+- [ ] atch (error) {
      handleMapLoadError(error, map);
    }
    ```
