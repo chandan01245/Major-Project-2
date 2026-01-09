@@ -136,14 +136,15 @@ class WAQIService:
             # If we have very little data (e.g. new station), fallback to synthetic
             # The model needs at least ~45 days to run a sequence
             if len(historical_values) < 45:
-                print(f"ℹ️  Insufficient real data ({len(historical_values)} pts). Supplementing with synthetic for stability.")
+                print(f"ℹ️  WAQI: Insufficient real data ({len(historical_values)} pts). Minimum 45 needed for LSTM. Supplementing with synthetic.")
                 return self._generate_synthetic_history(current_aqi, days)
 
-            print(f"✅ Retrieved {len(historical_values)} historical AQI data points (covering annual seasonality)")
+            print(f"✅ WAQI: Successfully retrieved {len(historical_values)} REAL historical data points from station {station_id}", flush=True)
+            print(f"   Date Range: {historical_values[0]['date']} to {historical_values[-1]['date']}", flush=True)
             return historical_values
             
         except requests.exceptions.RequestException as e:
-            print(f"⚠️ Error fetching historical AQI data: {e}")
+            print(f"⚠️ WAQI Error: {e}")
             # Try to get current AQI and generate synthetic data
             try:
                 current_data = self.get_current_aqi(lat, lng)

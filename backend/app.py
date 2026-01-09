@@ -235,6 +235,7 @@ def generate_report():
         return jsonify({'error': 'Polygon coordinates required'}), 400
 
     try:
+        print("🚀 Generate Report Request Received", flush=True)
         polygon = data['polygon']
         nearby_areas = data.get('nearby_areas', [])
         city = data.get('city', 'bangalore').lower()
@@ -242,7 +243,7 @@ def generate_report():
         # Check if zoning documents exist for this city (optional warning)
         docs = doc_processor.get_documents(city=city)
         if not docs:
-            print(f"⚠️ Warning: No zoning documents found for {city}. Using default ML predictions.")
+            print(f"⚠️ Warning: No zoning documents found for {city}. Using default ML predictions.", flush=True)
             # Continue anyway - we have default ML predictions
         
         # Calculate centroid for amenities search
@@ -253,28 +254,31 @@ def generate_report():
         amenities = amenities_finder.find_amenities(centroid_lat, centroid_lng)
         
         # Fetch real AQI data from WAQI
-        print(f"🌍 Fetching AQI data for coordinates: {centroid_lat}, {centroid_lng}")
+        print(f"🌍 Fetching AQI data for coordinates: {centroid_lat}, {centroid_lng}", flush=True)
         waqi_data = waqi_service.get_current_aqi(centroid_lat, centroid_lng)
         
         if waqi_data:
             current_aqi = waqi_data['aqi']
-            print(f"✅ Current AQI: {current_aqi} ({waqi_data['city']})")
+            print(f"✅ Current AQI: {current_aqi} ({waqi_data['city']})", flush=True)
             
             # Get historical data for better predictions
-            historical_aqi = waqi_service.get_historical_data(centroid_lat, centroid_lng, days=30)
-            historical_values = [h['aqi'] for h in historical_aqi] if historical_aqi else None
+            # Request 400 days to allow the model to learn annual seasonality (Winter vs Monsoon)
+            print("⏳ Step 2: Fetching 400 days of historical AQI data from WAQI service...", flush=True)
+            historical_aqi = waqi_service.get_historical_data(centroid_lat, centroid_lng, days=400)
             
-            if historical_values:
-                print(f"✅ Retrieved {len(historical_values)} historical AQI values")
-                aqi_forecast = aqi_predictor.predict_future(current_aqi, historical_data=historical_values)
+            if historical_aqi:
+                print(f"✅ Step 3: Retrieved {len(historical_aqi)} historical AQI values. REAL DATA confirmed.", flush=True)
+                # Pass city name to allow model caching/persistence
+                print(f"⏳ Step 4: Forecasting AQI for '{city}' using Hybrid LSTM+RF...", flush=True)
+                aqi_forecast = aqi_predictor.predict_future(current_aqi, historical_data=historical_aqi, city_name=city)
             else:
-                print("⚠️ No historical data available, using current AQI only")
-                aqi_forecast = aqi_predictor.predict_future(current_aqi)
+                print("⚠️ Step 3 Failed: No historical data available (API limit or new station). Using SYNTHETIC fallback.", flush=True)
+                aqi_forecast = aqi_predictor.predict_future(current_aqi, city_name=city)
         else:
             # Fallback to provided or default value
             current_aqi = data.get('current_aqi', 100)
-            print(f"⚠️ Could not fetch real AQI data, using fallback: {current_aqi}")
-            aqi_forecast = aqi_predictor.predict_future(current_aqi)
+            print(f"⚠️ Could not fetch real AQI data, using fallback: {current_aqi}", flush=True)
+            aqi_forecast = aqi_predictor.predict_future(current_aqi, city_name=city)
         
         # Get Lightning Risk
         # We need to know the building type, which comes from zoning prediction
@@ -395,27 +399,12 @@ def generate_report():
         return jsonify({
             'success': True,
             'report': report,
-            'debug_info': {
-                'backend': 'Python ML Backend',
-                'waqi_integrated': True,
-                'current_aqi_source': 'WAQI API' if waqi_data else 'Fallback',
-                'current_aqi_value': current_aqi,
-                'historical_data_points': len(historical_values) if historical_values else 0,
-                'forecast_length': len(aqi_forecast) if aqi_forecast else 0
-            }
         })
     except Exception as e:
         import traceback
-        error_details = traceback.format_exc()
-        city_name = city if 'city' in locals() else 'unknown'
-        print(f"❌ Error generating report for {city_name}:")
-        print(error_details)
-        
-        return jsonify({
-            'error': f'Error generating report: {str(e)}',
-            'city': city_name,
-            'details': str(e)
-        }), 500
+        print("❌ CRITICAL ERROR IN GENERATE_REPORT:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/api/documents', methods=['GET'])
 def get_documents():
@@ -721,21 +710,22 @@ def get_aqi_forecast():
         current_aqi = waqi_data['aqi']
         
         # Get historical data for better predictions
-        historical_aqi = waqi_service.get_historical_data(lat, lng, days=30)
-        historical_values = [h['aqi'] for h in historical_aqi] if historical_aqi else None
+        historical_aqi = waqi_service.get_historical_data(lat, lng, days=400)
         
         # Predict future AQI
-        if historical_values:
-            forecast = aqi_predictor.predict_future(current_aqi, days=days, historical_data=historical_values)
-        else:
-            forecast = aqi_predictor.predict_future(current_aqi, days=days)
+        forecast = aqi_predictor.predict_future(
+            current_aqi, 
+            days=days, 
+            historical_data=historical_aqi,
+            city_name=waqi_data.get('city', 'unknown')
+        )
         
         return jsonify({
             'success': True,
             'current_aqi': current_aqi,
             'city': waqi_data['city'],
             'forecast': forecast,
-            'historical_data_points': len(historical_values) if historical_values else 0
+            'historical_data_points': len(historical_aqi) if historical_aqi else 0
         })
         
     except Exception as e:

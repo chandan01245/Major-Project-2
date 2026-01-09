@@ -78,7 +78,7 @@ class AQIPredictor:
             os.makedirs(city_dir)
             
         return {
-            'lstm': os.path.join(city_dir, 'lstm_model.h5'),
+            'lstm': os.path.join(city_dir, 'lstm_model.keras'),
             'rf': os.path.join(city_dir, 'rf_model.joblib'),
             'scaler': os.path.join(city_dir, 'scaler.joblib'),
             'meta': os.path.join(city_dir, 'metadata.joblib')
@@ -88,24 +88,36 @@ class AQIPredictor:
         """
         Train a fresh model specific to the provided city data.
         Args:
-            historical_data: List of daily AQI values (e.g., [140, 142, 138...])
+            historical_data: List of daily AQI values (e.g., [140, 142...]) OR list of dicts
             city_name: Optional name of city to persistent the model for
         """
-        print(f"🧠 Training Hybrid Model on {len(historical_data)} data points" + (f" for {city_name}" if city_name else "") + "...")
+        print(f"🔹 Model Training Started for {city_name or 'Unknown City'}...", flush=True)
+        
+        # Data Sanitization: Handle WAQI service response format (list of dicts) directly
+        if historical_data and isinstance(historical_data, list) and len(historical_data) > 0:
+            if isinstance(historical_data[0], dict) and 'aqi' in historical_data[0]:
+                print(f"   Sanitizing input: Converting {len(historical_data)} dicts to raw values...", flush=True)
+                historical_data = [d['aqi'] for d in historical_data]
+        
+        print(f"🧠 Training Hybrid Model on {len(historical_data)} REAL data points...", flush=True)
 
         # 1. Prepare Data
         X_lstm, X_rf, y = self._prepare_data(historical_data)
         
         if len(X_lstm) < 10:
-            print("⚠️ Not enough data to train real model. Falling back to synthetic.")
+            print(f"⚠️ Insufficient prepared samples ({len(X_lstm)}). Falling back to synthetic training.")
             self._train_synthetic_fallback(city_name)
             return
 
         # 2. Train LSTM
+        print("   Training LSTM (Deep Learning)...")
         self.build_lstm_model()
         self.lstm_model.fit(X_lstm, y, epochs=15, batch_size=16, verbose=0)
 
         # 3. Train Random Forest
+        print("   Training Random Forest (Ensemble)...")
+        # Convert X_rf to numpy array explicitly to avoid "feature names" warning if it was dataframe
+        X_rf = np.array(X_rf)
         self.rf_model = RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)
         self.rf_model.fit(X_rf, y)
 
@@ -113,18 +125,18 @@ class AQIPredictor:
         
         # 4. Save to Disk if city_name provided
         if city_name:
-            print(f"💾 Saving model for {city_name} to disk...")
+            print(f"💾 Saving trained model for '{city_name}' to disk...")
             paths = self._get_city_paths(city_name)
             try:
                 self.lstm_model.save(paths['lstm'])
                 joblib.dump(self.rf_model, paths['rf'])
                 joblib.dump(self.scaler, paths['scaler'])
                 joblib.dump({'trained_on_points': len(historical_data)}, paths['meta'])
-                print(f"✅ Model saved successfully for {city_name}")
+                print(f"✅ Model successfully persisted for future use.")
             except Exception as e:
                 print(f"⚠️ Failed to save model: {e}") 
             
-        print("✅ Hybrid Model Trained")
+        print("✅ Hybrid Model Training Complete")
 
     def _train_synthetic_fallback(self, city_name=None):
         """Generates dummy data if real history is missing"""
@@ -145,6 +157,7 @@ class AQIPredictor:
             historical_data: The past data for the city (used to train!)
             city_name: Optional city name to check for saved model
         """
+        print(f"🔮 Prediction Request: Forecast {days} days for {city_name or 'Unknown'} (Current: {current_aqi})")
         
         # STEP 0: Prepare input sequence 
         clean_history = []
@@ -167,26 +180,30 @@ class AQIPredictor:
             paths = self._get_city_paths(city_name)
             if os.path.exists(paths['lstm']) and os.path.exists(paths['rf']):
                 try:
-                    print(f"📂 Loading saved model for {city_name}...")
+                    print(f"📂 Found existing model for {city_name}. Loading from disk...")
                     self.lstm_model = load_model(paths['lstm'])
                     self.rf_model = joblib.load(paths['rf'])
                     self.scaler = joblib.load(paths['scaler'])
                     self.is_trained = True
                     model_loaded = True
-                    print(f"⚡ Loaded {city_name} model from disk")
+                    print(f"⚡ FAST: Loaded {city_name} model instantly. Skipping training.")
                 except Exception as e:
-                    print(f"⚠️ Error loading saved model, retraining... {e}")
+                    print(f"⚠️ Error loading saved model, triggering retrain... {e}")
             
         # If not loaded, train new
         if not model_loaded:
+            print(f"🆕 No saved model found for {city_name}. Initiating training sequence...")
             if clean_history:
                 self.train(clean_history, city_name)
             else:
                 if not self.is_trained:
+                    print("⚠️ No history provided for training. Using synthetic fallback.")
                     self._train_synthetic_fallback(city_name)
 
         predictions = []
         curr_seq = list(input_sequence)
+        
+        print("✨ Generating forecast values...")
 
         # STEP 2: Rolling Prediction
         for _ in range(days):
@@ -202,7 +219,12 @@ class AQIPredictor:
             try:
                 # Get scaled predictions from both
                 lstm_pred_scaled = self.lstm_model.predict(lstm_in, verbose=0)[0][0]
-                rf_pred_scaled = self.rf_model.predict(rf_in)[0]
+                
+                # Suppress sklearn warning for just the prediction step
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    rf_pred_scaled = self.rf_model.predict(rf_in)[0]
 
                 # Weighted Average (Hybrid)
                 hybrid_scaled = (lstm_pred_scaled * self.lstm_weight) + (rf_pred_scaled * self.rf_weight)
