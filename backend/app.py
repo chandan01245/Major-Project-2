@@ -1,7 +1,15 @@
 import os
+import sys
 from datetime import datetime
+import threading
 
-from document_processor import DocumentProcessor
+# Fix Unicode encoding for Windows console
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+from document_processor_improved import ImprovedDocumentProcessor as DocumentProcessor
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from zoning_ml_model import ZoningMLModel
@@ -13,17 +21,26 @@ CORS(app)
 ml_model = ZoningMLModel()
 doc_processor = DocumentProcessor()
 
+# Track processing status
+processing_status = {}
+status_lock = threading.Lock()
+
 # Initialize new services
 from amenities_service import AmenitiesFinder
 from aqi_model import AQIPredictor
 from dotenv import load_dotenv
 from flood_model import FloodPredictor
+from waqi_service import WAQIService
+from geocoding_service import GeocodingService
+from city_config import get_city_config, format_currency, format_number
 
 load_dotenv() # Load environment variables
 
 amenities_finder = AmenitiesFinder()
 aqi_predictor = AQIPredictor()
 flood_predictor = FloodPredictor()
+waqi_service = WAQIService()
+geocoding_service = GeocodingService()
 
 # Load flood model on startup
 try:
@@ -47,7 +64,7 @@ def health_check():
 
 @app.route('/api/upload-document', methods=['POST'])
 def upload_document():
-    """Upload and process zoning regulation documents"""
+    """Upload and process zoning regulation documents (async processing)"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
@@ -65,39 +82,97 @@ def upload_document():
     # Save file with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{timestamp}_{file.filename}"
+    document_id = f"{city}_{timestamp}"
     
-    # Save to both uploads (temporary) and zoning-documents (permanent)
-    temp_filepath = os.path.join(UPLOAD_FOLDER, filename)
+    # Save directly to permanent storage (skip temp file)
     permanent_filepath = os.path.join(city_folder, filename)
     
-    file.save(temp_filepath)
-    
     try:
-        # Process document
-        extracted_data = doc_processor.process_document(temp_filepath, city=city)
-        
-        # Copy to permanent storage after successful processing
-        import shutil
-        shutil.copy2(temp_filepath, permanent_filepath)
-        
-        # Train model with extracted data
-        ml_model.add_training_data(extracted_data, city=city)
-        
+        # Save file first (fast operation)
+        file.save(permanent_filepath)
         print(f"✅ Document saved to: {permanent_filepath}")
-        print(f"📊 Extracted {len(extracted_data['rules'])} rules for {city}")
         
+        # Initialize status
+        with status_lock:
+            processing_status[document_id] = {
+                'status': 'processing',
+                'progress': 0,
+                'message': 'Processing started...'
+            }
+        
+        # Start background processing (non-blocking)
+        def process_in_background():
+            try:
+                print(f"🔄 Background processing started for: {filename}")
+                
+                # Progress callback to update status
+                def update_progress(progress, message):
+                    with status_lock:
+                        processing_status[document_id]['progress'] = progress
+                        processing_status[document_id]['message'] = message
+                
+                update_progress(10, 'Starting document processing...')
+                
+                extracted_data = doc_processor.process_document(
+                    permanent_filepath, 
+                    city=city,
+                    progress_callback=update_progress
+                )
+                
+                update_progress(85, 'Training ML model with extracted rules...')
+                
+                # Train model with extracted data
+                ml_model.add_training_data(extracted_data, city=city)
+                
+                with status_lock:
+                    processing_status[document_id] = {
+                        'status': 'complete',
+                        'progress': 100,
+                        'message': 'Processing complete',
+                        'rules_extracted': len(extracted_data['rules'])
+                    }
+                
+                print(f"✅ Background processing complete: {len(extracted_data['rules'])} rules extracted")
+            except Exception as e:
+                print(f"❌ Background processing error: {str(e)}")
+                with status_lock:
+                    processing_status[document_id] = {
+                        'status': 'error',
+                        'progress': 0,
+                        'message': f'Error: {str(e)}'
+                    }
+        
+        # Start processing thread
+        thread = threading.Thread(target=process_in_background, daemon=True)
+        thread.start()
+        
+        # Return immediately with success
         return jsonify({
             'success': True,
-            'document_id': extracted_data['id'],
+            'document_id': document_id,
             'filename': filename,
             'city': city,
-            'extracted_rules': len(extracted_data['rules']),
-            'processed': True,
+            'processing': 'background',
+            'message': 'Document uploaded successfully. Processing in background.',
             'storage_path': permanent_filepath
         })
+        
     except Exception as e:
-        print(f"❌ Error processing document: {str(e)}")
+        print(f"❌ Error uploading document: {str(e)}")
+        # Clean up file if save failed
+        if os.path.exists(permanent_filepath):
+            os.remove(permanent_filepath)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/document-status/<document_id>', methods=['GET'])
+def get_document_status(document_id):
+    """Get processing status for a document"""
+    with status_lock:
+        status = processing_status.get(document_id, {
+            'status': 'not_found',
+            'message': 'Document not found'
+        })
+    return jsonify(status)
 
 @app.route('/api/train-model', methods=['POST'])
 def train_model():
@@ -155,22 +230,20 @@ def predict_zoning():
 def generate_report():
     """Generate comprehensive ML-powered report"""
     data = request.json
-    
+
     if not data or 'polygon' not in data:
         return jsonify({'error': 'Polygon coordinates required'}), 400
-    
+
     try:
         polygon = data['polygon']
         nearby_areas = data.get('nearby_areas', [])
         city = data.get('city', 'bangalore').lower()
-        
-        # Check if zoning documents exist for this city
+
+        # Check if zoning documents exist for this city (optional warning)
         docs = doc_processor.get_documents(city=city)
         if not docs:
-            return jsonify({
-                'error': f'No zoning regulations found for {city}. Please upload documents first.',
-                'code': 'NO_ZONING_DOCS'
-            }), 400
+            print(f"⚠️ Warning: No zoning documents found for {city}. Using default ML predictions.")
+            # Continue anyway - we have default ML predictions
         
         # Calculate centroid for amenities search
         centroid_lng = sum(p[0] for p in polygon) / len(polygon)
@@ -179,10 +252,29 @@ def generate_report():
         # Fetch real amenities
         amenities = amenities_finder.find_amenities(centroid_lat, centroid_lng)
         
-        # Predict AQI
-        # For demo, we use a random current AQI if not provided
-        current_aqi = data.get('current_aqi', 100)
-        aqi_forecast = aqi_predictor.predict_future(current_aqi)
+        # Fetch real AQI data from WAQI
+        print(f"🌍 Fetching AQI data for coordinates: {centroid_lat}, {centroid_lng}")
+        waqi_data = waqi_service.get_current_aqi(centroid_lat, centroid_lng)
+        
+        if waqi_data:
+            current_aqi = waqi_data['aqi']
+            print(f"✅ Current AQI: {current_aqi} ({waqi_data['city']})")
+            
+            # Get historical data for better predictions
+            historical_aqi = waqi_service.get_historical_data(centroid_lat, centroid_lng, days=30)
+            historical_values = [h['aqi'] for h in historical_aqi] if historical_aqi else None
+            
+            if historical_values:
+                print(f"✅ Retrieved {len(historical_values)} historical AQI values")
+                aqi_forecast = aqi_predictor.predict_future(current_aqi, historical_data=historical_values)
+            else:
+                print("⚠️ No historical data available, using current AQI only")
+                aqi_forecast = aqi_predictor.predict_future(current_aqi)
+        else:
+            # Fallback to provided or default value
+            current_aqi = data.get('current_aqi', 100)
+            print(f"⚠️ Could not fetch real AQI data, using fallback: {current_aqi}")
+            aqi_forecast = aqi_predictor.predict_future(current_aqi)
         
         # Get Lightning Risk
         # We need to know the building type, which comes from zoning prediction
@@ -191,7 +283,8 @@ def generate_report():
         zoning_prediction = ml_model.predict(features)
         building_type = zoning_prediction['attributes']['zoneType']
         
-        lightning_risk = aqi_predictor.get_lightning_risk(city, building_type)
+        lightning_risk = aqi_predictor.get_lightning_risk(city, building_type, lat=centroid_lat, lng=centroid_lng)
+        print(f"⚡ Lightning Risk: {lightning_risk['level']} ({lightning_risk['probability']}% annual probability)")
         
         # Get Road Condition
         road_condition = amenities_finder.get_road_condition(centroid_lat, centroid_lng)
@@ -263,19 +356,66 @@ def generate_report():
             flood_risk={
                 'current': flood_risk,
                 'future': future_flood_risk
-            }
+            },
+            city=city  # Pass city for proper pricing
         )
+        
+        # Fetch address for the parcel
+        print(f"📍 Fetching address for coordinates: {centroid_lat}, {centroid_lng}")
+        address = geocoding_service.get_address(centroid_lat, centroid_lng)
+        if address:
+            print(f"✅ Address: {address}")
+            report['parcelInfo']['address'] = address
+        else:
+            print("⚠️ Could not fetch address")
+            report['parcelInfo']['address'] = 'Address not available'
+        
+        # Add city info with currency
+        city_config = get_city_config(city)
+        report['cityInfo'] = {
+            'id': city,
+            'name': city_config['name'],
+            'country': city_config['country'],
+            'currency': city_config['currency'],
+            'currencySymbol': city_config['currency'],
+            'currencyCode': city_config['currency_code']
+        }
+        
+        # Format pricing with proper currency
+        report['pricing']['currencySymbol'] = city_config['currency']
+        report['pricing']['currencyCode'] = city_config['currency_code']
+        
+        # Debug: Log AQI data being sent
+        print(f"📊 AQI Forecast being sent to frontend: {aqi_forecast[:5] if aqi_forecast else 'None'}... (showing first 5)")
+        print(f"📊 Report aqiForecast field: {report.get('aqiForecast', 'NOT FOUND')[:5] if report.get('aqiForecast') else 'None'}... (showing first 5)")
         
         # Debug: Log flood data
         print(f"🌊 Flood data in report: {report.get('floodRisk', 'NOT FOUND')}")
         
         return jsonify({
             'success': True,
-            'report': report
+            'report': report,
+            'debug_info': {
+                'backend': 'Python ML Backend',
+                'waqi_integrated': True,
+                'current_aqi_source': 'WAQI API' if waqi_data else 'Fallback',
+                'current_aqi_value': current_aqi,
+                'historical_data_points': len(historical_values) if historical_values else 0,
+                'forecast_length': len(aqi_forecast) if aqi_forecast else 0
+            }
         })
     except Exception as e:
-        print(f"Error generating report: {e}")
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        city_name = city if 'city' in locals() else 'unknown'
+        print(f"❌ Error generating report for {city_name}:")
+        print(error_details)
+        
+        return jsonify({
+            'error': f'Error generating report: {str(e)}',
+            'city': city_name,
+            'details': str(e)
+        }), 500
 
 @app.route('/api/documents', methods=['GET'])
 def get_documents():
@@ -488,6 +628,118 @@ def get_flood_info(city):
         })
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# AQI ENDPOINTS
+# ============================================================================
+
+@app.route('/api/aqi/current', methods=['POST'])
+def get_current_aqi():
+    """Get current AQI for given coordinates"""
+    data = request.json
+    
+    if not data or 'lat' not in data or 'lng' not in data:
+        return jsonify({'error': 'Latitude and longitude required'}), 400
+    
+    try:
+        lat = data['lat']
+        lng = data['lng']
+        
+        waqi_data = waqi_service.get_current_aqi(lat, lng)
+        
+        if waqi_data:
+            category = waqi_service.get_aqi_category(waqi_data['aqi'])
+            
+            return jsonify({
+                'success': True,
+                'aqi': waqi_data['aqi'],
+                'city': waqi_data['city'],
+                'station': waqi_data['station'],
+                'time': waqi_data['time'],
+                'dominentpol': waqi_data['dominentpol'],
+                'pollutants': waqi_data['pollutants'],
+                'category': category
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Could not fetch AQI data for this location'
+            }), 404
+            
+    except Exception as e:
+        print(f"Error fetching current AQI: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/aqi/historical', methods=['POST'])
+def get_historical_aqi():
+    """Get historical AQI data for given coordinates"""
+    data = request.json
+    
+    if not data or 'lat' not in data or 'lng' not in data:
+        return jsonify({'error': 'Latitude and longitude required'}), 400
+    
+    try:
+        lat = data['lat']
+        lng = data['lng']
+        days = data.get('days', 30)
+        
+        historical_data = waqi_service.get_historical_data(lat, lng, days=days)
+        
+        return jsonify({
+            'success': True,
+            'data': historical_data,
+            'count': len(historical_data)
+        })
+        
+    except Exception as e:
+        print(f"Error fetching historical AQI: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/aqi/forecast', methods=['POST'])
+def get_aqi_forecast():
+    """Get AQI forecast for given coordinates"""
+    data = request.json
+    
+    if not data or 'lat' not in data or 'lng' not in data:
+        return jsonify({'error': 'Latitude and longitude required'}), 400
+    
+    try:
+        lat = data['lat']
+        lng = data['lng']
+        days = data.get('days', 30)
+        
+        # Get current AQI
+        waqi_data = waqi_service.get_current_aqi(lat, lng)
+        
+        if not waqi_data:
+            return jsonify({
+                'success': False,
+                'error': 'Could not fetch current AQI data'
+            }), 404
+        
+        current_aqi = waqi_data['aqi']
+        
+        # Get historical data for better predictions
+        historical_aqi = waqi_service.get_historical_data(lat, lng, days=30)
+        historical_values = [h['aqi'] for h in historical_aqi] if historical_aqi else None
+        
+        # Predict future AQI
+        if historical_values:
+            forecast = aqi_predictor.predict_future(current_aqi, days=days, historical_data=historical_values)
+        else:
+            forecast = aqi_predictor.predict_future(current_aqi, days=days)
+        
+        return jsonify({
+            'success': True,
+            'current_aqi': current_aqi,
+            'city': waqi_data['city'],
+            'forecast': forecast,
+            'historical_data_points': len(historical_values) if historical_values else 0
+        })
+        
+    except Exception as e:
+        print(f"Error generating AQI forecast: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/buildings/models/<path:filename>')

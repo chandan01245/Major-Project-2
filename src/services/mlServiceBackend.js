@@ -385,6 +385,16 @@ class MLServiceBackend {
       }
 
       const data = await response.json();
+      
+      // DEBUG: Log what we received from backend
+      console.log('🔍 Backend Response Received:', {
+        hasReport: !!data.report,
+        hasAqiForecast: !!data.report?.aqiForecast,
+        aqiForecastLength: data.report?.aqiForecast?.length,
+        aqiForecastSample: data.report?.aqiForecast?.slice(0, 5),
+        debugInfo: data.debug_info
+      });
+      
       // Use backend amenities if available, otherwise use frontend-fetched ones
       return {
         ...data.report,

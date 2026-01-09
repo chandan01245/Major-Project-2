@@ -946,6 +946,15 @@ const IndianUrbanForm = () => {
         areaSqM
       );
 
+      // DEBUG: Log report data
+      console.log("📋 Generated Report Data:", {
+        hasAqiForecast: !!report.aqiForecast,
+        aqiForecastLength: report.aqiForecast?.length,
+        aqiForecastSample: report.aqiForecast?.slice(0, 5),
+        aqiForecastMin: report.aqiForecast ? Math.min(...report.aqiForecast) : null,
+        aqiForecastMax: report.aqiForecast ? Math.max(...report.aqiForecast) : null,
+      });
+
       // Calculate Traffic Impact
       const trafficStats = trafficService.calculateTripGeneration(
         areaSqM,
