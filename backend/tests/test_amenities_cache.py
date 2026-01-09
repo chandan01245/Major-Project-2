@@ -1,4 +1,8 @@
-from amenities_service import AmenitiesFinder
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from services.amenities_service import AmenitiesFinder
 import time
 
 finder = AmenitiesFinder()
