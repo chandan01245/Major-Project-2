@@ -324,14 +324,14 @@ class LightningPredictor:
         return {
             'level': risk_level,
             'riskLevel': risk_level,
-            'probability': round(final_probability, 1),
+            'probability': float(round(final_probability, 1)),
             'recommendation': recommendation,
             'warning': recommendation,
-            'lightningDensity': round(lightning_density, 1),
-            'annualStrikes': round(annual_strikes, 3),
+            'lightningDensity': float(round(lightning_density, 1)),
+            'annualStrikes': float(round(annual_strikes, 3)),
             'warnings': warnings,
             'buildingType': building_type,
-            'protectionRequired': final_probability > 10,
+            'protectionRequired': bool(final_probability > 10),
             'prediction_method': 'ML-trained' if self.is_trained else 'fallback'
         }
     

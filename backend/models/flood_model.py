@@ -128,11 +128,11 @@ class FloodPredictor:
         depth_inches = max(0, prediction[1])
 
         return {
-            'riskScore': round(risk_score, 2),
+            'riskScore': float(round(risk_score, 2)),
             'riskLevel': self._get_risk_level(risk_score),
             'description': self._get_risk_description(risk_score),
-            'depthInches': round(depth_inches, 1),
-            'elevation': round(elevation, 1)
+            'depthInches': float(round(depth_inches, 1)),
+            'elevation': float(round(elevation, 1))
         }
 
     def predict_future_risk(self, current_data, lat=None, lng=None, city_multiplier=1.0):
@@ -214,9 +214,9 @@ class FloodPredictor:
             
             future_predictions.append({
                 'year': f"+{scenario['years']} Years",
-                'riskScore': round(risk_score, 3),
+                'riskScore': float(round(risk_score, 3)),
                 'riskLevel': self._get_risk_level(risk_score),
-                'depthInches': round(depth_inches, 2)
+                'depthInches': float(round(depth_inches, 2))
             })
             
         return future_predictions
